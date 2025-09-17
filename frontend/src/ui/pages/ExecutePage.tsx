@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Spinner, Textarea, useDisclosure, useToast } from '@chakra-ui/react';
+import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, useDisclosure, useToast } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { listConnections, listScripts, startExecution } from '../../lib/api';
 
 export function ExecutePage() {
 	const toast = useToast();
@@ -8,13 +10,18 @@ export function ExecutePage() {
 	const { register, handleSubmit, formState: { errors, isSubmitting }, watch } = useForm();
 	const [preview, setPreview] = useState<string>('');
 
+	const { data: connections } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
+	const { data: scripts } = useQuery({ queryKey: ['scripts'], queryFn: listScripts });
+	const mutation = useMutation({ mutationFn: startExecution, onSuccess: () => toast({ title: 'Ejecución iniciada', status: 'success' }) });
+
 	const onSubmit = async (values: any) => {
-		setPreview(`-- Vista previa\nScript: ${values.script}\nDB: ${values.connection}\nParam foo: ${values.foo}`);
+		setPreview(`-- Vista previa\nScript: ${values.script}\nDB: ${values.connection}\nParams: ${JSON.stringify({ foo: values.foo }, null, 2)}`);
 		onOpen();
 	};
 
 	const onConfirm = async () => {
-		toast({ title: 'Ejecución iniciada', status: 'success' });
+		const values: any = { scriptId: watch('script'), dbConnectionId: watch('connection'), params: { foo: watch('foo') } };
+		await mutation.mutateAsync(values);
 		onClose();
 	};
 
@@ -26,14 +33,14 @@ export function ExecutePage() {
 					<FormControl isInvalid={!!errors.script}>
 						<FormLabel>Script</FormLabel>
 						<Select placeholder="Selecciona" {...register('script', { required: 'Requerido' })}>
-							<option value="script-1">Script 1</option>
+							{(scripts || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
 						</Select>
 						<FormErrorMessage>{errors.script?.message as any}</FormErrorMessage>
 					</FormControl>
 					<FormControl isInvalid={!!errors.connection}>
 						<FormLabel>Conexión</FormLabel>
 						<Select placeholder="Selecciona" {...register('connection', { required: 'Requerido' })}>
-							<option value="conn-1">Conn 1</option>
+							{(connections || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
 						</Select>
 						<FormErrorMessage>{errors.connection?.message as any}</FormErrorMessage>
 					</FormControl>
@@ -58,12 +65,10 @@ export function ExecutePage() {
 				<ModalOverlay />
 				<ModalContent>
 					<ModalHeader>Confirmar ejecución</ModalHeader>
-					<ModalBody>
-						¿Deseas ejecutar este script con los parámetros indicados?
-					</ModalBody>
+					<ModalBody>¿Deseas ejecutar este script con los parámetros indicados?</ModalBody>
 					<ModalFooter>
 						<Button onClick={onClose} variant="ghost">Cancelar</Button>
-						<Button colorScheme="blue" onClick={onConfirm}>Ejecutar</Button>
+						<Button colorScheme="blue" onClick={onConfirm} isLoading={mutation.isPending}>Ejecutar</Button>
 					</ModalFooter>
 				</ModalContent>
 			</Modal>

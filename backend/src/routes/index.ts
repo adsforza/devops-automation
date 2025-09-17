@@ -5,6 +5,7 @@ import { connectionsRouter } from '../modules/connections/router.js';
 import { scriptsRouter } from '../modules/scripts/router.js';
 import { executionsRouter } from '../modules/executions/router.js';
 import { auditRouter } from '../modules/audit/router.js';
+import { authRouter } from './auth.js';
 
 export const router = Router();
 
@@ -17,6 +18,7 @@ router.get('/version', (_req, res) => {
 });
 
 router.use('/', openapiRouter);
+router.use('/auth', authRouter);
 router.use('/db-connections', connectionsRouter);
 router.use('/scripts', scriptsRouter);
 router.use('/executions', executionsRouter);

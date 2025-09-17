@@ -1,6 +1,7 @@
-import { Box, Container, Flex, Heading, HStack, Link, Spacer, useColorMode, IconButton } from '@chakra-ui/react';
+import { Box, Container, Flex, Heading, HStack, Link, Spacer, useColorMode, IconButton, Button } from '@chakra-ui/react';
 import { Link as RouterLink, Outlet } from 'react-router-dom';
 import { SunIcon, MoonIcon } from '@chakra-ui/icons';
+import { api } from '../lib/api';
 
 export function MainLayout() {
 	const { colorMode, toggleColorMode } = useColorMode();
@@ -17,7 +18,11 @@ export function MainLayout() {
 							<Link as={RouterLink} to="/audit">Auditoría</Link>
 						</HStack>
 						<Spacer />
-						<IconButton aria-label="toggle theme" variant="ghost" onClick={toggleColorMode} icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />} />
+						<HStack>
+							<Button size="sm" variant="outline" onClick={() => api.post('/auth/login')}>Login</Button>
+							<Button size="sm" onClick={() => api.post('/auth/logout')}>Logout</Button>
+							<IconButton aria-label="toggle theme" variant="ghost" onClick={toggleColorMode} icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />} />
+						</HStack>
 					</Flex>
 				</Container>
 			</Box>
