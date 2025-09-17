@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { openapiRouter } from './openapi.ts';
+import { connectionsRouter } from '../modules/connections/router.js';
+import { scriptsRouter } from '../modules/scripts/router.js';
 
 export const router = Router();
 
@@ -13,6 +15,8 @@ router.get('/version', (_req, res) => {
 });
 
 router.use('/', openapiRouter);
+router.use('/db-connections', connectionsRouter);
+router.use('/scripts', scriptsRouter);
 
 router.get('/', (_req, res) => {
 	res.json({ name: 'automation-backend', docs: '/docs' });
