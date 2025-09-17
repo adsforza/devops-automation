@@ -2,6 +2,7 @@ import { prisma } from '../../db/prisma.js';
 import { ApiError } from '../../common/errors.js';
 import { CreateScriptInput, CreateScriptVersionInput } from './validation.js';
 import crypto from 'crypto';
+import { writeAuditLog } from '../audit/service.js';
 
 function basicSqlValidation(sql: string) {
 	// Very basic: disallow semicolon chains for now; real validation should parse or lint
@@ -38,6 +39,13 @@ export async function createScript(input: CreateScriptInput, createdBy: string) 
 			allowed: true,
 		}})));
 	}
+	await writeAuditLog({
+		action: 'script.create',
+		resourceType: 'script',
+		resourceId: script.id,
+		userId: createdBy,
+		after: { script },
+	});
 	return script;
 }
 
@@ -49,7 +57,7 @@ export async function addScriptVersion(scriptId: string, input: CreateScriptVers
 	const nextVersion = (last?.version || 0) + 1;
 	const checksum = crypto.createHash('sha256').update(input.sqlText, 'utf8').digest('hex');
 	const sqlTextEnc = Buffer.from(input.sqlText, 'utf8').toString('base64'); // placeholder; replace with KMS encryption
-	return prisma.scriptVersion.create({ data: {
+	const version = await prisma.scriptVersion.create({ data: {
 		scriptId,
 		version: nextVersion,
 		sqlTextEnc,
@@ -57,6 +65,15 @@ export async function addScriptVersion(scriptId: string, input: CreateScriptVers
 		createdBy,
 		isValidated: true,
 	}});
+	await writeAuditLog({
+		action: 'script.version.create',
+		resourceType: 'script-version',
+		resourceId: version.id,
+		userId: createdBy,
+		metadata: { scriptId, version: nextVersion },
+		after: { checksum },
+	});
+	return version;
 }
 
 export async function listScripts() {

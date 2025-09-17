@@ -2,6 +2,7 @@ import { Client as PgClient } from 'pg';
 import { prisma } from '../../db/prisma.js';
 import { ApiError } from '../../common/errors.js';
 import { secretCipher } from '../../common/crypto.js';
+import { writeAuditLog } from '../audit/service.js';
 
 export async function startExecution(scriptId: string, dbConnectionId: string, params: Record<string, unknown>, userId: string) {
 	const script = await prisma.script.findUnique({ where: { id: scriptId } });
@@ -25,6 +26,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 		status: 'running',
 		startedAt: new Date(),
 	}});
+	await writeAuditLog({ action: 'execution.start', resourceType: 'execution', resourceId: execution.id, userId, metadata: { scriptId, dbConnectionId } });
 
 	const username = secretCipher.decrypt(conn.usernameEnc);
 	const password = secretCipher.decrypt(conn.passwordEnc);
@@ -43,7 +45,6 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 		await client.connect();
 		await client.query('BEGIN');
 
-		// Simple named parameter replacement :param → $1 style
 		const { text, values } = buildParameterizedQuery(sqlText, params);
 		const result = await client.query(text, values);
 
@@ -55,6 +56,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			durationMs,
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: `Rows: ${result.rowCount}` } });
+		await writeAuditLog({ action: 'execution.succeeded', resourceType: 'execution', resourceId: execution.id, userId, metadata: { rowCount: result.rowCount } });
 		return { id: execution.id };
 	} catch (err: any) {
 		await safeRollback(client);
@@ -65,6 +67,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			errorMessage: String(err?.message || err),
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'error', message: String(err?.message || err) } });
+		await writeAuditLog({ action: 'execution.failed', resourceType: 'execution', resourceId: execution.id, userId, metadata: { error: String(err?.message || err) } });
 		throw err;
 	} finally {
 		await client.end().catch(() => {});
@@ -79,7 +82,6 @@ export async function getExecution(executionId: string) {
 }
 
 function buildParameterizedQuery(sql: string, params: Record<string, unknown>) {
-	// Replace :paramName with $n and collect values in order of appearance
 	const regex = /:([a-zA-Z_][a-zA-Z0-9_]*)/g;
 	const values: unknown[] = [];
 	const used = new Map<string, number>();

@@ -3,6 +3,7 @@ import { secretCipher } from '../../common/crypto.js';
 import { CreateConnectionInput, UpdateConnectionInput } from './validation.js';
 import { ApiError } from '../../common/errors.js';
 import { Client as PgClient } from 'pg';
+import { writeAuditLog } from '../audit/service.js';
 
 export async function createConnection(input: CreateConnectionInput, createdBy: string) {
 	const existing = await prisma.dbConnection.findUnique({ where: { name: input.name } });
@@ -23,6 +24,14 @@ export async function createConnection(input: CreateConnectionInput, createdBy: 
 			createdBy,
 		},
 	});
+	await writeAuditLog({
+		action: 'connection.create',
+		resourceType: 'database-connection',
+		resourceId: created.id,
+		userId: createdBy,
+		metadata: { name: created.name, engine: created.engine },
+		after: { ...created, usernameEnc: '***', passwordEnc: '***' },
+	});
 	return created;
 }
 
@@ -37,7 +46,7 @@ export async function getConnection(id: string) {
 }
 
 export async function updateConnection(id: string, input: UpdateConnectionInput) {
-	const conn = await getConnection(id);
+	const before = await getConnection(id);
 	const data: any = {};
 	if (input.name) data.name = input.name;
 	if (input.engine) data.engine = input.engine;
@@ -48,12 +57,29 @@ export async function updateConnection(id: string, input: UpdateConnectionInput)
 	if (input.password) data.passwordEnc = secretCipher.encrypt(input.password);
 	if (input.kmsKeyId !== undefined) data.kmsKeyId = input.kmsKeyId;
 	if (input.options !== undefined) data.optionsJson = input.options;
-	return prisma.dbConnection.update({ where: { id }, data });
+	const updated = await prisma.dbConnection.update({ where: { id }, data });
+	await writeAuditLog({
+		action: 'connection.update',
+		resourceType: 'database-connection',
+		resourceId: id,
+		userId: 'system',
+		metadata: { name: updated.name },
+		before: { ...before, usernameEnc: '***', passwordEnc: '***' },
+		after: { ...updated, usernameEnc: '***', passwordEnc: '***' },
+	});
+	return updated;
 }
 
 export async function deleteConnection(id: string) {
-	await getConnection(id);
+	const before = await getConnection(id);
 	await prisma.dbConnection.delete({ where: { id } });
+	await writeAuditLog({
+		action: 'connection.delete',
+		resourceType: 'database-connection',
+		resourceId: id,
+		userId: 'system',
+		before: { ...before, usernameEnc: '***', passwordEnc: '***' },
+	});
 }
 
 export async function testConnectivity(id: string) {
@@ -72,6 +98,13 @@ export async function testConnectivity(id: string) {
 	try {
 		await client.connect();
 		const result = await client.query('SELECT 1 as ok');
+		await writeAuditLog({
+			action: 'connection.test',
+			resourceType: 'database-connection',
+			resourceId: id,
+			userId: 'system',
+			metadata: { ok: true },
+		});
 		return { ok: true, result: result.rows[0] };
 	} finally {
 		await client.end().catch(() => {});
