@@ -1,0 +1,200 @@
+// Datasource and generator
+generator client {
+	provider = "prisma-client-js"
+}
+
+datasource db {
+	provider = "postgresql"
+	url      = env("DATABASE_URL")
+}
+
+model User {
+	id            String   @id @default(cuid())
+	externalId    String   @unique
+	email         String   @unique
+	displayName   String
+	status        String   @default("active")
+	lastLoginAt   DateTime?
+	createdAt     DateTime @default(now())
+	roles         UserRole[]
+	permissions   UserPermission[]
+	executions    Execution[]
+	auditLogs     AuditLog[]
+}
+
+model Role {
+	id          String           @id @default(cuid())
+	name        String           @unique
+	description String?
+	users       UserRole[]
+	permissions RolePermission[]
+}
+
+model Permission {
+	id           String   @id @default(cuid())
+	resourceType String
+	resourceId   String
+	operation    String
+	roleBindings RolePermission[]
+	userBindings UserPermission[]
+	@@index([resourceType, resourceId, operation])
+}
+
+model UserRole {
+	user   User @relation(fields: [userId], references: [id])
+	userId String
+	role   Role @relation(fields: [roleId], references: [id])
+	roleId String
+	@@id([userId, roleId])
+}
+
+model RolePermission {
+	role        Role       @relation(fields: [roleId], references: [id])
+	roleId      String
+	permission  Permission @relation(fields: [permissionId], references: [id])
+	permissionId String
+	@@id([roleId, permissionId])
+}
+
+model UserPermission {
+	user        User       @relation(fields: [userId], references: [id])
+	userId      String
+	permission  Permission @relation(fields: [permissionId], references: [id])
+	permissionId String
+	@@id([userId, permissionId])
+}
+
+model DbConnection {
+	id            String   @id @default(cuid())
+	name          String   @unique
+	engine        String   // postgres | mysql | sqlserver | oracle
+	host          String
+	port          Int
+	database      String
+	usernameEnc   String
+	passwordEnc   String
+	kmsKeyId      String
+	optionsJson   Json?
+	createdBy     String
+	createdAt     DateTime @default(now())
+	updatedAt     DateTime @updatedAt
+	isActive      Boolean  @default(true)
+	scripts       ScriptDbLink[]
+	executions    Execution[]
+	@@index([engine, isActive])
+}
+
+model Script {
+	id          String           @id @default(cuid())
+	key         String           @unique
+	name        String
+	description String?
+	createdBy   String
+	createdAt   DateTime         @default(now())
+	isActive    Boolean          @default(true)
+	versions    ScriptVersion[]
+	params      ScriptParameter[]
+	dbLinks     ScriptDbLink[]
+	executions  Execution[]
+}
+
+model ScriptVersion {
+	id          String   @id @default(cuid())
+	script      Script   @relation(fields: [scriptId], references: [id])
+	scriptId    String
+	version     Int
+	sqlTextEnc  String
+	checksum    String
+	createdBy   String
+	createdAt   DateTime @default(now())
+	isValidated Boolean  @default(false)
+	@@unique([scriptId, version])
+}
+
+model ScriptParameter {
+	id            String  @id @default(cuid())
+	script        Script  @relation(fields: [scriptId], references: [id])
+	scriptId      String
+	name          String
+	type          String
+	required      Boolean @default(false)
+	defaultValue  String?
+	validationJson Json?
+	orderIndex    Int     @default(0)
+	@@unique([scriptId, name])
+}
+
+model ScriptDbLink {
+	id              String      @id @default(cuid())
+	script          Script      @relation(fields: [scriptId], references: [id])
+	scriptId        String
+	dbConnection    DbConnection @relation(fields: [dbConnectionId], references: [id])
+	dbConnectionId  String
+	allowed         Boolean     @default(true)
+	@@unique([scriptId, dbConnectionId])
+}
+
+model Execution {
+	id               String    @id @default(cuid())
+	script           Script?   @relation(fields: [scriptId], references: [id])
+	scriptId         String?
+	scriptVersion    ScriptVersion? @relation(fields: [scriptVersionId], references: [id])
+	scriptVersionId  String?
+	dbConnection     DbConnection @relation(fields: [dbConnectionId], references: [id])
+	dbConnectionId   String
+	user             User      @relation(fields: [userId], references: [id])
+	userId           String
+	paramsJson       Json?
+	status           String
+	startedAt        DateTime  @default(now())
+	endedAt          DateTime?
+	durationMs       Int?
+	txId             String?
+	errorCode        String?
+	errorMessage     String?
+	logs             ExecutionLog[]
+	changeHistories  ChangeHistory[]
+	@@index([status, startedAt])
+}
+
+model ExecutionLog {
+	id          String    @id @default(cuid())
+	execution   Execution @relation(fields: [executionId], references: [id])
+	executionId String
+	level       String
+	message     String
+	createdAt   DateTime  @default(now())
+	@@index([executionId, createdAt])
+}
+
+model AuditLog {
+	id           String   @id @default(cuid())
+	eventTime    DateTime @default(now())
+	user         User?    @relation(fields: [userId], references: [id])
+	userId       String?
+	ip           String?
+	userAgent    String?
+	action       String
+	resourceType String
+	resourceId   String
+	metadataJson Json?
+	beforeJson   Json?
+	afterJson    Json?
+	prevHash     String?
+	currHash     String
+}
+
+model ChangeHistory {
+	id          String    @id @default(cuid())
+	tableFqdn   String
+	pk          String
+	changeTime  DateTime  @default(now())
+	user        User?     @relation(fields: [userId], references: [id])
+	userId      String?
+	operation   String
+	beforeJson  Json?
+	afterJson   Json?
+	execution   Execution? @relation(fields: [executionId], references: [id])
+	executionId String?
+	@@index([tableFqdn, pk, changeTime])
+}
