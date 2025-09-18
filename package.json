@@ -1,0 +1,19 @@
+{
+  "name": "automation-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down -v",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "be:gen": "npx --yes prisma --schema backend/prisma/schema.prisma generate",
+    "be:migrate": "cd backend && npx prisma migrate dev --name init",
+    "be:seed": "npm --prefix backend run prisma:seed",
+    "be:dev": "npm --prefix backend run dev",
+    "fe:dev": "npm --prefix frontend run dev",
+    "dev": "concurrently \"npm run be:dev\" \"npm run fe:dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
