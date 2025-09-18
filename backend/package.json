@@ -14,7 +14,8 @@
     "test": "jest --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.630.0",
