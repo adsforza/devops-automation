@@ -12,7 +12,8 @@ class AesGcmCipher implements SecretCipher {
 
 	constructor(secret: string) {
 		// Derive 32-byte key using HKDF-SHA256
-		this.key = crypto.hkdfSync('sha256', Buffer.from(secret), Buffer.alloc(0), Buffer.from('aes-gcm-256'), 32);
+		const ab = crypto.hkdfSync('sha256', Buffer.from(secret), Buffer.alloc(0), Buffer.from('aes-gcm-256'), 32);
+		this.key = Buffer.from(ab);
 	}
 
 	encrypt(plaintext: string): string {
