@@ -23,9 +23,9 @@ export function ExecutePage() {
 		// reset solo params, preservando script y connection actuales
 		const currentConnection = getValues('connection');
 		const base: Record<string, any> = { script: selectedScriptId, connection: currentConnection };
-		for (const p of selectedScript.params || []) {
-			const def = p.defaultValue ?? '';
-			base[p.name] = def;
+		for (const p of (selectedScript as any).params || []) {
+			const def = (p as any).defaultValue ?? '';
+			base[(p as any).name] = def;
 		}
 		reset(base);
 	}, [selectedScriptId]);
@@ -67,7 +67,7 @@ export function ExecutePage() {
 				return (
 					<FormControl key={name} isInvalid={!!(errors as any)[name]} isRequired={required} mb={3}>
 						<FormLabel>{name}</FormLabel>
-						<Textarea rows={4} placeholder="{ \"key\": \"value\" }" {...commonProps} />
+						<Textarea rows={4} placeholder={'{ "key": "value" }'} {...commonProps} />
 						<FormErrorMessage>{(errors as any)[name]?.message as any}</FormErrorMessage>
 					</FormControl>
 				);
@@ -150,14 +150,14 @@ export function ExecutePage() {
 function buildParams(selectedScript: any, getValues: (name?: string) => any) {
 	const params: Record<string, any> = {};
 	if (!selectedScript) return params;
-	for (const p of selectedScript.params || []) {
-		let v = getValues(p.name);
-		if (p.type === 'number' && v !== undefined && v !== '') v = Number(v);
-		if (p.type === 'boolean') v = v === 'true' || v === true;
-		if (p.type === 'json' && typeof v === 'string' && v.trim()) {
+	for (const p of (selectedScript as any).params || []) {
+		let v = getValues((p as any).name);
+		if ((p as any).type === 'number' && v !== undefined && v !== '') v = Number(v);
+		if ((p as any).type === 'boolean') v = v === 'true' || v === true;
+		if ((p as any).type === 'json' && typeof v === 'string' && v.trim()) {
 			try { v = JSON.parse(v); } catch { /* keep as string */ }
 		}
-		if (v !== undefined && v !== '') params[p.name] = v;
+		if (v !== undefined && v !== '') params[(p as any).name] = v;
 	}
 	return params;
 }
