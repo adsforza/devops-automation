@@ -1,7 +1,8 @@
-import { Box, Button, FormControl, FormLabel, Heading, Input, Select, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Heading, Input, Select, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createUser, listRoles, listUsers } from '../../lib/api';
-import { useState } from 'react';
+import { createUser, deleteUser, listRoles, listUsers, updateUser } from '../../lib/api';
+import { useMemo, useState } from 'react';
+import { DeleteIcon } from '@chakra-ui/icons';
 
 export function AdminPage() {
 	const toast = useToast();
@@ -10,8 +11,10 @@ export function AdminPage() {
 	const { data: roles } = useQuery({ queryKey: ['roles'], queryFn: listRoles });
 	const [email, setEmail] = useState('');
 	const [name, setName] = useState('');
-	const [roleId, setRoleId] = useState('');
-	const mut = useMutation({ mutationFn: createUser, onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setRoleId(''); } });
+	const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+	const createMut = useMutation({ mutationFn: createUser, onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setSelectedRoleIds([]); } });
+	const updateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateUser(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario actualizado', status: 'success' }); } });
+	const deleteMut = useMutation({ mutationFn: (id: string) => deleteUser(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario eliminado', status: 'success' }); } });
 
 	return (
 		<Box>
@@ -35,18 +38,31 @@ export function AdminPage() {
 								<Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre Apellido" />
 							</FormControl>
 							<FormControl maxW="sm">
-								<FormLabel>Rol</FormLabel>
-								<Select placeholder="Selecciona" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+								<FormLabel>Roles</FormLabel>
+								<Select multiple value={selectedRoleIds} onChange={(e) => setSelectedRoleIds(Array.from(e.target.selectedOptions).map(o => o.value))}>
 									{(roles || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
 								</Select>
 							</FormControl>
-							<Button colorScheme="blue" onClick={() => mut.mutate({ email, displayName: name, roleIds: roleId ? [roleId] : [] })} isLoading={mut.isPending}>Crear</Button>
+							<Button colorScheme="blue" onClick={() => createMut.mutate({ email, displayName: name, roleIds: selectedRoleIds })} isLoading={createMut.isPending}>Crear</Button>
 						</HStack>
 						<Table size="sm">
-							<Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Estado</Th></Tr></Thead>
+							<Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Roles</Th><Th>Acciones</Th></Tr></Thead>
 							<Tbody>
-								{(users || []).map((u: any) => (<Tr key={u.id}><Td>{u.email}</Td><Td>{u.displayName}</Td><Td>{u.status}</Td></Tr>))}
-								{(!users || users.length === 0) && <Tr><Td colSpan={3}>Sin usuarios</Td></Tr>}
+								{(users || []).map((u: any) => (
+									<Tr key={u.id}>
+										<Td>{u.email}</Td>
+										<Td>
+											<Input size="sm" defaultValue={u.displayName} onBlur={(e) => updateMut.mutate({ id: u.id, payload: { displayName: e.target.value } })} />
+										</Td>
+										<Td>
+											<Select size="sm" multiple defaultValue={(u.roles || []).map((r: any) => r.roleId)} onChange={(e) => updateMut.mutate({ id: u.id, payload: { roleIds: Array.from(e.target.selectedOptions).map(o => o.value) } })}>
+												{(roles || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+											</Select>
+										</Td>
+										<Td><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => deleteMut.mutate(u.id)} /></Td>
+									</Tr>
+								))}
+								{(!users || users.length === 0) && <Tr><Td colSpan={4}>Sin usuarios</Td></Tr>}
 							</Tbody>
 						</Table>
 					</TabPanel>

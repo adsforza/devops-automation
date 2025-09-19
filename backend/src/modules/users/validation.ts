@@ -8,3 +8,10 @@ export const CreateUserSchema = z.object({
 });
 
 export type CreateUserInput = z.infer<typeof CreateUserSchema>;
+
+export const UpdateUserSchema = z.object({
+	displayName: z.string().min(1).optional(),
+	roleIds: z.array(z.string()).optional(),
+});
+
+export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;

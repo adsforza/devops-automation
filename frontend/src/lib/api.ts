@@ -49,3 +49,12 @@ export async function createUser(payload: { email: string; displayName: string; 
 	const { data } = await api.post('/admin/users', payload);
 	return data;
 }
+
+export async function updateUser(id: string, payload: { displayName?: string; roleIds?: string[] }) {
+	const { data } = await api.put(`/admin/users/${id}`, payload);
+	return data;
+}
+
+export async function deleteUser(id: string) {
+	await api.delete(`/admin/users/${id}`);
+}
