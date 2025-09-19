@@ -1,4 +1,4 @@
-import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection } from '../../lib/api';
 import { useRef, useState, useEffect } from 'react';
@@ -83,6 +83,28 @@ export function AdminPage() {
 	const [roleNameError, setRoleNameError] = useState<string | null>(null);
 	const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
 	const [editedRole, setEditedRole] = useState<{ name: string; description?: string } | null>(null);
+	const { isOpen: isRoleModalOpen, onOpen: onRoleModalOpen, onClose: onRoleModalClose } = useDisclosure();
+
+	function openCreateRoleModal() {
+		setEditingRoleId(null);
+		setEditedRole({ name: '', description: '' });
+		onRoleModalOpen();
+	}
+	function openEditRoleModal(r: any) {
+		setEditingRoleId(r.id);
+		setEditedRole({ name: r.name, description: r.description });
+		onRoleModalOpen();
+	}
+	function submitRoleModal() {
+		if (!editedRole?.name || editedRole.name.length < 3) { setRoleNameError('Nombre de rol mínimo 3 caracteres'); return; }
+		setRoleNameError(null);
+		if (editingRoleId) {
+			rolesUpdateMut.mutate({ id: editingRoleId, payload: { name: editedRole.name, description: editedRole.description } });
+		} else {
+			rolesCreateMut.mutate({ name: editedRole!.name, description: editedRole!.description });
+		}
+		onRoleModalClose();
+	}
 
 	// Connections CRUD + edit mode
 	const { data: conns } = useQuery({ queryKey: ['connections-all'], queryFn: listConnections });
@@ -174,54 +196,51 @@ export function AdminPage() {
 						<HStack mt={4} justify="flex-end"><Button size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} isDisabled={page === 0}>Anterior</Button><Box>Page {page + 1} / {Math.max(1, Math.ceil(total / limit))}</Box><Button size="sm" onClick={() => setPage((p) => (p + 1) < Math.ceil(total / limit) ? p + 1 : p)} isDisabled={(page + 1) >= Math.ceil(total / limit)}>Siguiente</Button></HStack>
 					</TabPanel>
 					<TabPanel>
-						<HStack mb={4} spacing={4} align="flex-end">
-							<FormControl maxW="sm" isInvalid={!!roleNameError}><FormLabel>Nombre</FormLabel><Input value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} /><FormErrorMessage>{roleNameError}</FormErrorMessage></FormControl>
-							<FormControl maxW="md"><FormLabel>Descripción</FormLabel><Input value={newRoleDesc} onChange={(e) => setNewRoleDesc(e.target.value)} /></FormControl>
-							<Button colorScheme="blue" onClick={handleCreateRole} isLoading={rolesCreateMut.isPending}>Crear rol</Button>
+						<HStack mb={4} spacing={4} align="center">
+							<Button colorScheme="blue" onClick={openCreateRoleModal}>Nuevo rol</Button>
 						</HStack>
 						<Table size="sm">
 							<Thead><Tr><Th>Nombre</Th><Th>Descripción</Th><Th>Permisos</Th><Th>Acciones</Th></Tr></Thead>
 							<Tbody>
-								{(rolesAll || []).map((r: any) => {
-									const isEditing = editingRoleId === r.id;
-									return (
-										<Tr key={r.id}>
-											<Td>
-												{isEditing ? (
-													<Input size="sm" value={editedRole?.name ?? r.name} onChange={(e) => setEditedRole({ name: e.target.value, description: editedRole?.description ?? r.description })} />
-												) : (
-													<Text>{r.name}</Text>
-												)}
-											</Td>
-											<Td>
-												{isEditing ? (
-													<Input size="sm" value={editedRole?.description ?? (r.description || '')} onChange={(e) => setEditedRole({ name: editedRole?.name ?? r.name, description: e.target.value })} />
-												) : (
-													<Text>{r.description || '-'}</Text>
-												)}
-											</Td>
-											<Td>
-												<RolePermsEditor roleId={r.id} />
-											</Td>
-											<Td>
-												{!isEditing ? (
-													<HStack>
-														<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => { setEditingRoleId(r.id); setEditedRole({ name: r.name, description: r.description }); }} />
-														<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'role', id: r.id }); setConfirmOpen(true); }} />
-													</HStack>
-												) : (
-													<HStack>
-														<Button size="sm" colorScheme="blue" onClick={() => rolesUpdateMut.mutate({ id: r.id, payload: { name: editedRole?.name, description: editedRole?.description } })}>Guardar</Button>
-														<Button size="sm" variant="ghost" onClick={() => { setEditingRoleId(null); setEditedRole(null); }}>Cancelar</Button>
-													</HStack>
-												)}
-											</Td>
-										</Tr>
-								);
-								})}
+								{(rolesAll || []).map((r: any) => (
+									<Tr key={r.id}>
+										<Td>{r.name}</Td>
+										<Td>{r.description || '-'}</Td>
+										<Td><RolePermsEditor roleId={r.id} /></Td>
+										<Td>
+											<HStack>
+												<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => openEditRoleModal(r)} />
+												<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'role', id: r.id }); setConfirmOpen(true); }} />
+											</HStack>
+										</Td>
+									</Tr>
+								))}
 								{(!rolesAll || rolesAll.length === 0) && <Tr><Td colSpan={4}>Sin roles</Td></Tr>}
 							</Tbody>
 						</Table>
+
+						<Modal isOpen={isRoleModalOpen} onClose={onRoleModalClose}>
+							<ModalOverlay />
+							<ModalContent>
+								<ModalHeader>{editingRoleId ? 'Editar rol' : 'Nuevo rol'}</ModalHeader>
+								<ModalCloseButton />
+								<ModalBody>
+									<FormControl isInvalid={!!roleNameError} mb={3}>
+										<FormLabel>Nombre</FormLabel>
+										<Input value={editedRole?.name || ''} onChange={(e) => setEditedRole({ name: e.target.value, description: editedRole?.description })} />
+										<FormErrorMessage>{roleNameError}</FormErrorMessage>
+									</FormControl>
+									<FormControl>
+										<FormLabel>Descripción</FormLabel>
+										<Input value={editedRole?.description || ''} onChange={(e) => setEditedRole({ name: editedRole?.name || '', description: e.target.value })} />
+									</FormControl>
+								</ModalBody>
+								<ModalFooter>
+									<Button variant="ghost" mr={3} onClick={onRoleModalClose}>Cancelar</Button>
+									<Button colorScheme="blue" onClick={submitRoleModal}>{editingRoleId ? 'Guardar' : 'Crear'}</Button>
+								</ModalFooter>
+							</ModalContent>
+						</Modal>
 					</TabPanel>
 					<TabPanel>
 						<HStack mb={4} spacing={4} align="flex-end">
