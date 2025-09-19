@@ -135,11 +135,20 @@ export function AdminPage() {
 
 	function openCreateScript() { setEditingScript(null); setScriptForm({ key: '', name: '', description: '', params: [], connections: [] }); setScriptModalOpen(true); }
 	function openEditScript(s: any) { setEditingScript(s); setScriptForm({ key: s.key, name: s.name, description: s.description || '', params: s.params || [], connections: (s.dbLinks || []).map((l: any) => l.dbConnectionId) }); setScriptModalOpen(true); }
-	function saveScript() {
+	async function saveScript() {
 		if (!scriptForm.name || (!editingScript && !scriptForm.key)) { toast({ title: 'Nombre y clave requeridos', status: 'warning' }); return; }
-		if (!editingScript) scriptsCreateMut.mutate({ key: scriptForm.key, name: scriptForm.name, description: scriptForm.description, params: scriptForm.params, connections: scriptForm.connections });
-		else scriptsUpdateMut.mutate({ id: editingScript.id, payload: { name: scriptForm.name, description: scriptForm.description } });
-		setScriptModalOpen(false);
+		try {
+			if (!editingScript) {
+				await scriptsCreateMut.mutateAsync({ key: scriptForm.key, name: scriptForm.name, description: scriptForm.description, params: scriptForm.params, connections: scriptForm.connections });
+			} else {
+				await scriptsUpdateMut.mutateAsync({ id: editingScript.id, payload: { name: scriptForm.name, description: scriptForm.description } });
+				await scriptsSetConnectionsMut.mutateAsync({ id: editingScript.id, connections: scriptForm.connections || [] });
+				await scriptsSetParametersMut.mutateAsync({ id: editingScript.id, params: scriptForm.params || [] });
+			}
+			setScriptModalOpen(false);
+		} catch (e: any) {
+			toast({ title: 'Error al guardar script', description: e?.message, status: 'error' });
+		}
 	}
 
 	function handleCreateUser() {
