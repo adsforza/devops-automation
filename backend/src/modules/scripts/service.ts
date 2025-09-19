@@ -22,7 +22,7 @@ export async function createScript(input: CreateScriptInput, createdBy: string) 
 		},
 	});
 	if (input.params?.length) {
-		await prisma.$transaction(input.params.map((p, idx) => prisma.scriptParameter.create({ data: {
+		await Promise.all(input.params.map((p, idx) => prisma.scriptParameter.create({ data: {
 			scriptId: script.id,
 			name: p.name,
 			type: p.type,
@@ -33,7 +33,7 @@ export async function createScript(input: CreateScriptInput, createdBy: string) 
 		}})));
 	}
 	if (input.connections?.length) {
-		await prisma.$transaction(input.connections.map((connId) => prisma.scriptDbLink.create({ data: {
+		await Promise.all(input.connections.map((connId) => prisma.scriptDbLink.create({ data: {
 			scriptId: script.id,
 			dbConnectionId: connId,
 			allowed: true,
@@ -67,7 +67,7 @@ export async function setScriptConnections(id: string, connections: string[], us
 	await prisma.$transaction(async (tx) => {
 		await tx.scriptDbLink.deleteMany({ where: { scriptId: id } });
 		if (connections.length) {
-			await tx.$transaction(connections.map((connId) => tx.scriptDbLink.create({ data: { scriptId: id, dbConnectionId: connId, allowed: true } })));
+			await Promise.all(connections.map((connId) => tx.scriptDbLink.create({ data: { scriptId: id, dbConnectionId: connId, allowed: true } })));
 		}
 	});
 	await writeAuditLog({ action: 'script.setConnections', resourceType: 'script', resourceId: id, userId, metadata: { connections } });
@@ -77,7 +77,7 @@ export async function setScriptParameters(id: string, params: Array<{ name: stri
 	await prisma.$transaction(async (tx) => {
 		await tx.scriptParameter.deleteMany({ where: { scriptId: id } });
 		if (params.length) {
-			await tx.$transaction(params.map((p, idx) => tx.scriptParameter.create({ data: {
+			await Promise.all(params.map((p, idx) => tx.scriptParameter.create({ data: {
 				scriptId: id,
 				name: p.name,
 				type: p.type,
