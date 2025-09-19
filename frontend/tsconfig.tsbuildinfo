@@ -1,0 +1,1 @@
+{"root":["./src/i18n.ts","./src/main.tsx","./src/router.tsx","./src/lib/api.ts","./src/theme/index.ts","./src/ui/MainLayout.tsx","./src/ui/pages/AdminPage.tsx","./src/ui/pages/AuditPage.tsx","./src/ui/pages/DashboardPage.tsx","./src/ui/pages/ExecutePage.tsx"],"version":"5.9.2"}
