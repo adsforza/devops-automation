@@ -56,7 +56,7 @@ export function AdminPage() {
 	const [editingUserId, setEditingUserId] = useState<string | null>(null);
 	const [editedUser, setEditedUser] = useState<{ displayName: string; roleIds: string[]; status: 'active' | 'disabled' } | null>(null);
 
-	const createMut = useMutation({ mutationFn: createUser, onSuccess: () => { invalidateUsers(); setPage(0); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setSelectedRoleIds([]); setEmailError(null); setNameError(null); }, onError: (e: any) => toast({ title: 'Error al crear usuario', description: e?.message, status: 'error' }) });
+	const createMut = useMutation({ mutationFn: createUser, onSuccess: () => { invalidateUsers(); setPage(0); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setSelectedRoleIds([]); setEmailError(null); setNameError(null); onUserModalClose(); }, onError: (e: any) => toast({ title: 'Error al crear usuario', description: e?.message, status: 'error' }) });
 	const updateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateUser(id, payload), onSuccess: () => { invalidateUsers(); toast({ title: 'Usuario actualizado', status: 'success' }); setEditingUserId(null); setEditedUser(null); } });
 
 	// Delete confirmation state
@@ -494,11 +494,11 @@ function RolePermsEditor({ roleId, modal, onClose }: { roleId: string; modal?: b
 	return (
 		<Box>
 			<HStack mb={2}>
-				<FormControl maxW="md"><FormLabel>Conexión</FormLabel><Select value={connectionId} onChange={(e) => setConnectionId(e.target.value)} placeholder="Selecciona"><option key="" value="">Selecciona</option>{connections.map((c: any) => (<option key={c.id} value={c.id}>{c.name}</option>))}</Select></FormControl>
+				<FormControl maxW="md"><FormLabel>Conexión</FormLabel><Select value={connectionId} onChange={(e) => setConnectionId(e.target.value)} placeholder="Selecciona">{connections.map((c: any) => (<option key={c.id} value={c.id}>{c.name}</option>))}</Select></FormControl>
 				<FormControl maxW="xs"><FormLabel>Esquema</FormLabel><Input value={schemaFilter} onChange={(e) => setSchemaFilter(e.target.value)} placeholder="public" /></FormControl>
 				<FormControl maxW="xs"><FormLabel>Nombre</FormLabel><Input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="users" /></FormControl>
-				<Button onClick={() => saveMut.mutate({ connectionId, tablePermissions: Object.entries(tableOps).map(([fqdn, ops]) => ({ fqdn, operations: ops })), procPermissions: Object.entries(procExec).map(([fqdn, allowed]) => ({ fqdn, allowed })) })} isDisabled={!connectionId} colorScheme="blue">Guardar permisos</Button>
-				{modal && <Button variant="ghost" onClick={onClose}>Cerrar</Button>}
+				<Button onClick={() => saveMut.mutate({ connectionId, tablePermissions: Object.entries(tableOps).map(([fqdn, ops]) => ({ fqdn, operations: ops })), procPermissions: Object.entries(procExec).map(([fqdn, allowed]) => ({ fqdn, allowed })) })} isDisabled={!connectionId} colorScheme="blue" size="sm">Guardar</Button>
+				{modal && <Button variant="ghost" onClick={onClose} size="sm">Cerrar</Button>}
 			</HStack>
 			{connectionId && (
 				<HStack align="start" spacing={8}>

@@ -5,7 +5,7 @@ import { secretCipher } from '../../common/crypto.js';
 import { writeAuditLog } from '../audit/service.js';
 
 export async function startExecution(scriptId: string, dbConnectionId: string, params: Record<string, unknown>, userId: string) {
-	const script = await prisma.script.findUnique({ where: { id: scriptId } });
+	const script = await prisma.script.findUnique({ where: { id: scriptId }, include: { params: true } });
 	if (!script) throw new ApiError(404, 'Script not found', 'ScriptNotFound');
 	const version = await prisma.scriptVersion.findFirst({ where: { scriptId }, orderBy: { version: 'desc' } });
 	if (!version) throw new ApiError(400, 'Script has no versions', 'NoScriptVersion');
@@ -14,6 +14,12 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 	const conn = await prisma.dbConnection.findUnique({ where: { id: dbConnectionId } });
 	if (!conn) throw new ApiError(404, 'Connection not found', 'ConnNotFound');
 	if (conn.engine !== 'postgres') throw new ApiError(400, 'Only postgres supported for now', 'EngineNotSupported');
+
+	// Validate required params
+	const required = script.params.filter((p) => p.required).map((p) => p.name);
+	for (const r of required) {
+		if (!(r in params)) throw new ApiError(400, `Missing required param: ${r}`, 'MissingParam');
+	}
 
 	const sqlText = Buffer.from(version.sqlTextEnc, 'base64').toString('utf8');
 
@@ -68,7 +74,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'error', message: String(err?.message || err) } });
 		await writeAuditLog({ action: 'execution.failed', resourceType: 'execution', resourceId: execution.id, userId, metadata: { error: String(err?.message || err) } });
-		throw err;
+		throw new ApiError(400, `Execution failed: ${String(err?.message || err)}`, 'ExecutionFailed');
 	} finally {
 		await client.end().catch(() => {});
 	}
