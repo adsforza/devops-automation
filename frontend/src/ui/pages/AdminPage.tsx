@@ -1,8 +1,9 @@
 import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection } from '../../lib/api';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { DeleteIcon, EditIcon } from '@chakra-ui/icons';
+import { listMetadataTables, listMetadataProcs, rolePermsGet, rolePermsSet } from '../../lib/api';
 
 function RolesPopoverEditor({ roles, value, onChange, isDisabled }: { roles: any[]; value: string[]; onChange: (v: string[]) => void; isDisabled?: boolean }) {
 	return (
@@ -179,7 +180,7 @@ export function AdminPage() {
 							<Button colorScheme="blue" onClick={handleCreateRole} isLoading={rolesCreateMut.isPending}>Crear rol</Button>
 						</HStack>
 						<Table size="sm">
-							<Thead><Tr><Th>Nombre</Th><Th>Descripción</Th><Th>Acciones</Th></Tr></Thead>
+							<Thead><Tr><Th>Nombre</Th><Th>Descripción</Th><Th>Permisos</Th><Th>Acciones</Th></Tr></Thead>
 							<Tbody>
 								{(rolesAll || []).map((r: any) => {
 									const isEditing = editingRoleId === r.id;
@@ -200,6 +201,9 @@ export function AdminPage() {
 												)}
 											</Td>
 											<Td>
+												<RolePermsEditor roleId={r.id} />
+											</Td>
+											<Td>
 												{!isEditing ? (
 													<HStack>
 														<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => { setEditingRoleId(r.id); setEditedRole({ name: r.name, description: r.description }); }} />
@@ -215,7 +219,7 @@ export function AdminPage() {
 										</Tr>
 								);
 								})}
-								{(!rolesAll || rolesAll.length === 0) && <Tr><Td colSpan={3}>Sin roles</Td></Tr>}
+								{(!rolesAll || rolesAll.length === 0) && <Tr><Td colSpan={4}>Sin roles</Td></Tr>}
 							</Tbody>
 						</Table>
 					</TabPanel>
@@ -290,6 +294,59 @@ export function AdminPage() {
 					</AlertDialogContent>
 				</AlertDialogOverlay>
 			</AlertDialog>
+		</Box>
+	);
+}
+
+function RolePermsEditor({ roleId }: { roleId: string }) {
+	const toast = useToast();
+	const qc = useQueryClient();
+	const { data: connections } = useQuery({ queryKey: ['connections-all'], queryFn: listConnections });
+	const [connectionId, setConnectionId] = useState<string>('');
+	const { data: tables } = useQuery({ queryKey: ['metadata-tables', connectionId], queryFn: () => listMetadataTables(connectionId), enabled: !!connectionId });
+	const { data: procs } = useQuery({ queryKey: ['metadata-procs', connectionId], queryFn: () => listMetadataProcs(connectionId), enabled: !!connectionId });
+	const { data: current } = useQuery({ queryKey: ['role-perms', roleId, connectionId], queryFn: () => rolePermsGet(roleId, connectionId), enabled: !!connectionId });
+	const [tableOps, setTableOps] = useState<Record<string, string[]>>({});
+	const [procExec, setProcExec] = useState<Record<string, boolean>>({});
+	const saveMut = useMutation({ mutationFn: (payload: any) => rolePermsSet(roleId, payload), onSuccess: () => { toast({ title: 'Permisos guardados', status: 'success' }); qc.invalidateQueries({ queryKey: ['role-perms', roleId, connectionId] }); } });
+
+	useEffect(() => {
+		if (!current) return;
+		const tOps: Record<string, string[]> = {};
+		const pExec: Record<string, boolean> = {};
+		for (const p of current) {
+			const [, type, fqdn] = p.resourceId.split('::')[1].split(':');
+			if (type === 'table') {
+				tOps[fqdn] = [...(tOps[fqdn] || []), p.operation];
+			}
+			if (type === 'proc') {
+				pExec[fqdn] = true;
+			}
+		}
+		setTableOps(tOps);
+		setProcExec(pExec);
+	}, [current]);
+
+	if (!connections || connections.length === 0) return <Text>Sin conexiones</Text>;
+
+	return (
+		<Box>
+			<HStack mb={2}>
+				<FormControl maxW="md"><FormLabel>Conexión</FormLabel><Select value={connectionId} onChange={(e) => setConnectionId(e.target.value)} placeholder="Selecciona"><option key="" value="">Selecciona</option>{connections.map((c: any) => (<option key={c.id} value={c.id}>{c.name}</option>))}</Select></FormControl>
+				<Button onClick={() => saveMut.mutate({ connectionId, tablePermissions: Object.entries(tableOps).map(([fqdn, ops]) => ({ fqdn, operations: ops })), procPermissions: Object.entries(procExec).map(([fqdn, allowed]) => ({ fqdn, allowed })) })} isDisabled={!connectionId} colorScheme="blue">Guardar permisos</Button>
+			</HStack>
+			{connectionId && (
+				<HStack align="start" spacing={8}>
+					<Box flex="1">
+						<Heading size="sm" mb={2}>Tablas</Heading>
+						<Table size="sm"><Thead><Tr><Th>Tabla</Th><Th>Permisos</Th></Tr></Thead><Tbody>{(tables || []).map((t: any) => { const fqdn = t.fqdn; const selected = tableOps[fqdn] || []; const toggle = (op: string) => { const set = new Set(selected); set.has(op) ? set.delete(op) : set.add(op); setTableOps({ ...tableOps, [fqdn]: Array.from(set) }); }; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><HStack><Checkbox isChecked={selected.includes('INSERT')} onChange={() => toggle('INSERT')}>INSERT</Checkbox><Checkbox isChecked={selected.includes('UPDATE')} onChange={() => toggle('UPDATE')}>UPDATE</Checkbox><Checkbox isChecked={selected.includes('DELETE')} onChange={() => toggle('DELETE')}>DELETE</Checkbox></HStack></Td></Tr>); })}</Tbody></Table>
+					</Box>
+					<Box flex="1">
+						<Heading size="sm" mb={2}>Stored procedures/funciones</Heading>
+						<Table size="sm"><Thead><Tr><Th>Nombre</Th><Th>EXECUTE</Th></Tr></Thead><Tbody>{(procs || []).map((p: any) => { const fqdn = p.fqdn; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><Checkbox isChecked={!!procExec[fqdn]} onChange={(e) => setProcExec({ ...procExec, [fqdn]: e.target.checked })}>EXECUTE</Checkbox></Td></Tr>); })}</Tbody></Table>
+					</Box>
+				</HStack>
+			)}
 		</Box>
 	);
 }

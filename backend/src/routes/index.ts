@@ -9,6 +9,8 @@ import { authRouter } from './auth.js';
 import { usersRouter } from '../modules/users/router.js';
 import { rolesRouter } from '../modules/roles/router.js';
 import { changesRouter } from '../modules/changes/router.js';
+import { metadataRouter } from '../modules/metadata/router.js';
+import { rolePermsRouter } from '../modules/rolesPerms/router.js';
 
 export const router = Router();
 
@@ -23,12 +25,14 @@ router.get('/version', (_req, res) => {
 router.use('/', openapiRouter);
 router.use('/auth', authRouter);
 router.use('/db-connections', connectionsRouter);
+router.use('/db-connections/:id/metadata', metadataRouter);
 router.use('/scripts', scriptsRouter);
 router.use('/executions', executionsRouter);
 router.use('/audit', auditRouter);
 router.use('/changes', changesRouter);
 router.use('/admin/users', usersRouter);
 router.use('/admin/roles', rolesRouter);
+router.use('/admin/roles/:roleId/permissions', rolePermsRouter);
 
 router.get('/', (_req, res) => {
 	res.json({ name: 'automation-backend', docs: '/docs' });
