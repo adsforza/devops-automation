@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText } from '@chakra-ui/react';
+import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText, Stack, Badge } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { listConnections, listScripts, startExecution } from '../../lib/api';
+
+function b64decode(b64?: string) {
+	if (!b64) return '';
+	try { return atob(b64); } catch { return ''; }
+}
 
 export function ExecutePage() {
 	const toast = useToast();
@@ -26,7 +31,24 @@ export function ExecutePage() {
 	}, [connections, selectedScript, allowedConnectionIds]);
 	const connectionNotAllowed = !!selectedScript && !!selectedConnectionId && !allowedConnectionIds.includes(selectedConnectionId);
 
-	// When script changes, reset params defaults and clear connection if not allowed
+	// Latest SQL for preview
+	const latestSql = useMemo(() => {
+		if (!selectedScript || !selectedScript.versions || selectedScript.versions.length === 0) return '';
+		const latest = [...selectedScript.versions].sort((a: any, b: any) => b.version - a.version)[0];
+		return b64decode(latest.sqlTextEnc);
+	}, [selectedScript]);
+
+	// Extract placeholders from SQL
+	const sqlParamNames = useMemo(() => {
+		if (!latestSql) return [] as string[];
+		const names = new Set<string>();
+		const re = /:([a-zA-Z_][a-zA-Z0-9_]*)/g;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(latestSql)) !== null) names.add(m[1]);
+		return Array.from(names);
+	}, [latestSql]);
+
+	// When script changes, reset params defaults and auto-select first allowed connection
 	useEffect(() => {
 		if (!selectedScript) return;
 		const base: Record<string, any> = { script: selectedScriptId, connection: undefined };
@@ -35,6 +57,10 @@ export function ExecutePage() {
 			base[(p as any).name] = def;
 		}
 		reset(base);
+		// auto-select first allowed connection if exists
+		setTimeout(() => {
+			if (allowedConnectionIds.length > 0) setValue('connection', allowedConnectionIds[0]);
+		}, 0);
 	}, [selectedScriptId]);
 
 	// Required completeness check
@@ -137,6 +163,20 @@ export function ExecutePage() {
 					<Box mb={4}>
 						<Heading size="sm" mb={2}>Parámetros</Heading>
 						{(selectedScript.params || []).map((p: any) => renderParamField(p))}
+						<Stack mt={4} spacing={2}>
+							<Heading size="sm">SQL (versión actual)</Heading>
+							<Code display="block" p={3} whiteSpace="pre">{latestSql || 'Sin versiones'}</Code>
+							{sqlParamNames.length > 0 && (
+								<Box>
+									<Heading size="xs" mb={1}>Placeholders detectados</Heading>
+									{sqlParamNames.map((n) => {
+										const isReq = requiredNames.includes(n);
+										const hasVal = !!(watchedAll as any)[n];
+										return <HStack key={n} spacing={2}><Badge colorScheme={hasVal ? 'green' : 'red'}>{hasVal ? 'OK' : 'Falta'}</Badge><Code>{`:${n}`}</Code>{isReq && <Badge>Requerido</Badge>}</HStack>;
+									})}
+								</Box>
+							)}
+						</Stack>
 					</Box>
 				)}
 
