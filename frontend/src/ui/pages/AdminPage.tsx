@@ -219,7 +219,7 @@ export function AdminPage() {
 							</Tbody>
 						</Table>
 
-						<Modal isOpen={isRoleModalOpen} onClose={onRoleModalClose}>
+						<Modal isOpen={isRoleModalOpen} onClose={onRoleModalClose} size="lg">
 							<ModalOverlay />
 							<ModalContent>
 								<ModalHeader>{editingRoleId ? 'Editar rol' : 'Nuevo rol'}</ModalHeader>
@@ -236,8 +236,10 @@ export function AdminPage() {
 									</FormControl>
 								</ModalBody>
 								<ModalFooter>
-									<Button variant="ghost" mr={3} onClick={onRoleModalClose}>Cancelar</Button>
-									<Button colorScheme="blue" onClick={submitRoleModal}>{editingRoleId ? 'Guardar' : 'Crear'}</Button>
+									<HStack spacing={3}>
+										<Button variant="ghost" onClick={onRoleModalClose}>Cancelar</Button>
+										<Button colorScheme="blue" onClick={submitRoleModal}>{editingRoleId ? 'Guardar' : 'Crear'}</Button>
+									</HStack>
 								</ModalFooter>
 							</ModalContent>
 						</Modal>

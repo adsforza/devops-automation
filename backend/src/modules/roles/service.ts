@@ -26,7 +26,25 @@ export async function updateRole(id: string, input: UpdateRoleInput, userId: str
 export async function deleteRole(id: string, userId: string) {
 	const before = await prisma.role.findUnique({ where: { id } });
 	if (!before) throw new ApiError(404, 'Role not found', 'RoleNotFound');
-	await prisma.userRole.deleteMany({ where: { roleId: id } });
-	await prisma.role.delete({ where: { id } });
+	await prisma.$transaction(async (tx) => {
+		// Remove user-role links
+		await tx.userRole.deleteMany({ where: { roleId: id } });
+		// Collect permissions linked to this role
+		const links = await tx.rolePermission.findMany({ where: { roleId: id }, select: { permissionId: true } });
+		const permIds = links.map((l) => l.permissionId);
+		// Remove role-permission links
+		await tx.rolePermission.deleteMany({ where: { roleId: id } });
+		// Remove orphan permissions (no other role/user links)
+		if (permIds.length) {
+			const stillLinked = await tx.rolePermission.findMany({ where: { permissionId: { in: permIds } }, select: { permissionId: true } });
+			const stillLinkedSet = new Set(stillLinked.map((x) => x.permissionId));
+			const orphanIds = permIds.filter((pid) => !stillLinkedSet.has(pid));
+			if (orphanIds.length) {
+				await tx.permission.deleteMany({ where: { id: { in: orphanIds } } });
+			}
+		}
+		// Finally remove the role
+		await tx.role.delete({ where: { id } });
+	});
 	await writeAuditLog({ action: 'role.delete', resourceType: 'role', resourceId: id, userId, before });
 }
