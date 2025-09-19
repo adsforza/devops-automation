@@ -1,14 +1,14 @@
-import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection } from '../../lib/api';
 import { useRef, useState } from 'react';
-import { DeleteIcon } from '@chakra-ui/icons';
+import { DeleteIcon, EditIcon } from '@chakra-ui/icons';
 
-function RolesPopoverEditor({ roles, value, onChange }: { roles: any[]; value: string[]; onChange: (v: string[]) => void }) {
+function RolesPopoverEditor({ roles, value, onChange, isDisabled }: { roles: any[]; value: string[]; onChange: (v: string[]) => void; isDisabled?: boolean }) {
 	return (
-		<Popover placement="bottom-start">
+		<Popover placement="bottom-start" isLazy>
 			<PopoverTrigger>
-				<Button size="xs" variant="outline">Roles ({value.length})</Button>
+				<Button size="xs" variant="outline" isDisabled={isDisabled}>Roles ({value.length})</Button>
 			</PopoverTrigger>
 			<PopoverContent w="sm">
 				<PopoverArrow />
@@ -46,8 +46,12 @@ export function AdminPage() {
 	const [emailError, setEmailError] = useState<string | null>(null);
 	const [nameError, setNameError] = useState<string | null>(null);
 
+	// Edit mode state for users
+	const [editingUserId, setEditingUserId] = useState<string | null>(null);
+	const [editedUser, setEditedUser] = useState<{ displayName: string; roleIds: string[]; status: 'active' | 'disabled' } | null>(null);
+
 	const createMut = useMutation({ mutationFn: createUser, onSuccess: () => { invalidateUsers(); setPage(0); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setSelectedRoleIds([]); setEmailError(null); setNameError(null); }, onError: (e: any) => toast({ title: 'Error al crear usuario', description: e?.message, status: 'error' }) });
-	const updateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateUser(id, payload), onSuccess: () => { invalidateUsers(); toast({ title: 'Usuario actualizado', status: 'success' }); } });
+	const updateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateUser(id, payload), onSuccess: () => { invalidateUsers(); toast({ title: 'Usuario actualizado', status: 'success' }); setEditingUserId(null); setEditedUser(null); } });
 
 	// Delete confirmation state
 	const [confirmOpen, setConfirmOpen] = useState(false);
@@ -67,22 +71,26 @@ export function AdminPage() {
 		setConfirmItem(null);
 	} });
 
-	const statusMut = useMutation({ mutationFn: ({ id, status }: any) => updateUserStatus(id, status), onSuccess: () => { invalidateUsers(); toast({ title: 'Estado actualizado', status: 'success' }); } });
+	const statusMut = useMutation({ mutationFn: ({ id, status }: any) => updateUserStatus(id, status), onSuccess: () => { invalidateUsers(); toast({ title: 'Estado actualizado', status: 'success' }); if (editedUser) setEditedUser({ ...editedUser, status: editedUser.status === 'active' ? 'disabled' : 'active' }); } });
 
-	// Roles CRUD
+	// Roles CRUD + edit mode
 	const { data: rolesAll } = useQuery({ queryKey: ['roles-all'], queryFn: rolesListAll });
-	const rolesCreateMut = useMutation({ mutationFn: rolesCreate, onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles-all'] }); toast({ title: 'Rol creado', status: 'success' }); } });
-	const rolesUpdateMut = useMutation({ mutationFn: ({ id, payload }: any) => rolesUpdate(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles-all'] }); toast({ title: 'Rol actualizado', status: 'success' }); } });
+	const rolesCreateMut = useMutation({ mutationFn: rolesCreate, onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles-all'] }); toast({ title: 'Rol creado', status: 'success' }); setNewRoleName(''); setNewRoleDesc(''); } });
+	const rolesUpdateMut = useMutation({ mutationFn: ({ id, payload }: any) => rolesUpdate(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['roles-all'] }); toast({ title: 'Rol actualizado', status: 'success' }); setEditingRoleId(null); setEditedRole(null); } });
 	const [newRoleName, setNewRoleName] = useState('');
 	const [newRoleDesc, setNewRoleDesc] = useState('');
 	const [roleNameError, setRoleNameError] = useState<string | null>(null);
+	const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+	const [editedRole, setEditedRole] = useState<{ name: string; description?: string } | null>(null);
 
-	// Connections CRUD
+	// Connections CRUD + edit mode
 	const { data: conns } = useQuery({ queryKey: ['connections-all'], queryFn: listConnections });
-	const connCreateMut = useMutation({ mutationFn: createConnection, onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections-all'] }); toast({ title: 'Conexión creada', status: 'success' }); } });
-	const connUpdateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateConnection(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections-all'] }); toast({ title: 'Conexión actualizada', status: 'success' }); } });
+	const connCreateMut = useMutation({ mutationFn: createConnection, onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections-all'] }); toast({ title: 'Conexión creada', status: 'success' }); setNewConn({ name: '', engine: 'postgres', host: 'localhost', port: 5432, database: 'appdb', username: '', password: '' }); } });
+	const connUpdateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateConnection(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections-all'] }); toast({ title: 'Conexión actualizada', status: 'success' }); setEditingConnId(null); setEditedConn(null); } });
 	const connTestMut = useMutation({ mutationFn: (id: string) => testConnection(id), onSuccess: () => toast({ title: 'Conexión OK', status: 'success' }), onError: () => toast({ title: 'Fallo test', status: 'error' }) });
 	const [newConn, setNewConn] = useState<any>({ name: '', engine: 'postgres', host: 'localhost', port: 5432, database: 'appdb', username: '', password: '' });
+	const [editingConnId, setEditingConnId] = useState<string | null>(null);
+	const [editedConn, setEditedConn] = useState<any | null>(null);
 
 	function handleCreateUser() {
 		let ok = true;
@@ -116,7 +124,52 @@ export function AdminPage() {
 							<FormControl><FormLabel>Roles</FormLabel><CheckboxGroup value={selectedRoleIds} onChange={(v) => setSelectedRoleIds(v as string[])}><Wrap>{(rolesForUsers || []).map((r: any) => (<WrapItem key={r.id}><Checkbox value={r.id}>{r.name}</Checkbox></WrapItem>))}</Wrap></CheckboxGroup></FormControl>
 							<Button colorScheme="blue" onClick={handleCreateUser} isLoading={createMut.isPending}>Crear</Button>
 						</HStack>
-						<Table size="sm"><Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Estado</Th><Th>Roles</Th><Th>Acciones</Th></Tr></Thead><Tbody>{users.map((u: any) => { const currentRoleIds = (u.roles || []).map((r: any) => r.roleId); return (<Tr key={u.id}><Td>{u.email}</Td><Td><Input size="sm" defaultValue={u.displayName} onBlur={(e) => updateMut.mutate({ id: u.id, payload: { displayName: e.target.value } })} /></Td><Td>{u.status === 'active' ? <Badge colorScheme="green">Activo</Badge> : <Badge>Desactivado</Badge>}<Button size="xs" ml={2} onClick={() => statusMut.mutate({ id: u.id, status: u.status === 'active' ? 'disabled' : 'active' })}>{u.status === 'active' ? 'Desactivar' : 'Activar'}</Button></Td><Td><RolesPopoverEditor roles={rolesForUsers || []} value={currentRoleIds} onChange={(roleIds) => updateMut.mutate({ id: u.id, payload: { roleIds } })} /></Td><Td><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'user', id: u.id }); setConfirmOpen(true); }} /></Td></Tr>); })}{users.length === 0 && <Tr><Td colSpan={5}>Sin usuarios</Td></Tr>}</Tbody></Table>
+						<Table size="sm">
+							<Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Estado</Th><Th>Roles</Th><Th>Acciones</Th></Tr></Thead>
+							<Tbody>
+								{users.map((u: any) => {
+									const currentRoleIds = (u.roles || []).map((r: any) => r.roleId);
+									const isEditing = editingUserId === u.id;
+									return (
+										<Tr key={u.id}>
+											<Td>{u.email}</Td>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedUser?.displayName ?? u.displayName} onChange={(e) => setEditedUser({ displayName: e.target.value, roleIds: editedUser?.roleIds ?? currentRoleIds, status: editedUser?.status ?? u.status })} />
+												) : (
+													<Text>{u.displayName}</Text>
+												)}
+											</Td>
+											<Td>
+												{u.status === 'active' ? <Badge colorScheme="green">Activo</Badge> : <Badge>Desactivado</Badge>}
+												{isEditing && (
+													<Button size="xs" ml={2} onClick={() => statusMut.mutate({ id: u.id, status: (editedUser?.status ?? u.status) === 'active' ? 'disabled' : 'active' })}>
+														{(editedUser?.status ?? u.status) === 'active' ? 'Desactivar' : 'Activar'}
+													</Button>
+												)}
+											</Td>
+											<Td>
+												<RolesPopoverEditor roles={rolesForUsers || []} value={isEditing ? (editedUser?.roleIds ?? currentRoleIds) : currentRoleIds} onChange={(roleIds) => setEditedUser({ displayName: editedUser?.displayName ?? u.displayName, roleIds, status: editedUser?.status ?? u.status })} isDisabled={!isEditing} />
+											</Td>
+											<Td>
+												{!isEditing ? (
+													<HStack>
+														<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => { setEditingUserId(u.id); setEditedUser({ displayName: u.displayName, roleIds: currentRoleIds, status: u.status }); }} />
+														<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'user', id: u.id }); setConfirmOpen(true); }} />
+													</HStack>
+												) : (
+													<HStack>
+														<Button size="sm" colorScheme="blue" onClick={() => updateMut.mutate({ id: u.id, payload: { displayName: editedUser?.displayName, roleIds: editedUser?.roleIds } })}>Guardar</Button>
+														<Button size="sm" variant="ghost" onClick={() => { setEditingUserId(null); setEditedUser(null); }}>Cancelar</Button>
+													</HStack>
+												)}
+											</Td>
+										</Tr>
+									);
+								})}
+								{users.length === 0 && <Tr><Td colSpan={5}>Sin usuarios</Td></Tr>}
+							</Tbody>
+						</Table>
 						<HStack mt={4} justify="flex-end"><Button size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} isDisabled={page === 0}>Anterior</Button><Box>Page {page + 1} / {Math.max(1, Math.ceil(total / limit))}</Box><Button size="sm" onClick={() => setPage((p) => (p + 1) < Math.ceil(total / limit) ? p + 1 : p)} isDisabled={(page + 1) >= Math.ceil(total / limit)}>Siguiente</Button></HStack>
 					</TabPanel>
 					<TabPanel>
@@ -125,7 +178,46 @@ export function AdminPage() {
 							<FormControl maxW="md"><FormLabel>Descripción</FormLabel><Input value={newRoleDesc} onChange={(e) => setNewRoleDesc(e.target.value)} /></FormControl>
 							<Button colorScheme="blue" onClick={handleCreateRole} isLoading={rolesCreateMut.isPending}>Crear rol</Button>
 						</HStack>
-						<Table size="sm"><Thead><Tr><Th>Nombre</Th><Th>Descripción</Th><Th>Acciones</Th></Tr></Thead><Tbody>{(rolesAll || []).map((r: any) => (<Tr key={r.id}><Td><Input size="sm" defaultValue={r.name} onBlur={(e) => rolesUpdateMut.mutate({ id: r.id, payload: { name: e.target.value } })} /></Td><Td><Input size="sm" defaultValue={r.description || ''} onBlur={(e) => rolesUpdateMut.mutate({ id: r.id, payload: { description: e.target.value } })} /></Td><Td><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'role', id: r.id }); setConfirmOpen(true); }} /></Td></Tr>))}{(!rolesAll || rolesAll.length === 0) && <Tr><Td colSpan={3}>Sin roles</Td></Tr>}</Tbody></Table>
+						<Table size="sm">
+							<Thead><Tr><Th>Nombre</Th><Th>Descripción</Th><Th>Acciones</Th></Tr></Thead>
+							<Tbody>
+								{(rolesAll || []).map((r: any) => {
+									const isEditing = editingRoleId === r.id;
+									return (
+										<Tr key={r.id}>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedRole?.name ?? r.name} onChange={(e) => setEditedRole({ name: e.target.value, description: editedRole?.description ?? r.description })} />
+												) : (
+													<Text>{r.name}</Text>
+												)}
+											</Td>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedRole?.description ?? (r.description || '')} onChange={(e) => setEditedRole({ name: editedRole?.name ?? r.name, description: e.target.value })} />
+												) : (
+													<Text>{r.description || '-'}</Text>
+												)}
+											</Td>
+											<Td>
+												{!isEditing ? (
+													<HStack>
+														<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => { setEditingRoleId(r.id); setEditedRole({ name: r.name, description: r.description }); }} />
+														<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'role', id: r.id }); setConfirmOpen(true); }} />
+													</HStack>
+												) : (
+													<HStack>
+														<Button size="sm" colorScheme="blue" onClick={() => rolesUpdateMut.mutate({ id: r.id, payload: { name: editedRole?.name, description: editedRole?.description } })}>Guardar</Button>
+														<Button size="sm" variant="ghost" onClick={() => { setEditingRoleId(null); setEditedRole(null); }}>Cancelar</Button>
+													</HStack>
+												)}
+											</Td>
+										</Tr>
+								);
+								})}
+								{(!rolesAll || rolesAll.length === 0) && <Tr><Td colSpan={3}>Sin roles</Td></Tr>}
+							</Tbody>
+						</Table>
 					</TabPanel>
 					<TabPanel>
 						<HStack mb={4} spacing={4} align="flex-end">
@@ -138,7 +230,49 @@ export function AdminPage() {
 							<FormControl maxW="sm"><FormLabel>Password</FormLabel><Input type="password" value={newConn.password} onChange={(e) => setNewConn({ ...newConn, password: e.target.value })} /></FormControl>
 							<Button colorScheme="blue" onClick={() => connCreateMut.mutate(newConn)} isLoading={connCreateMut.isPending}>Crear conexión</Button>
 						</HStack>
-						<Table size="sm"><Thead><Tr><Th>Nombre</Th><Th>Engine</Th><Th>Host</Th><Th>DB</Th><Th>Acciones</Th></Tr></Thead><Tbody>{(conns || []).map((c: any) => (<Tr key={c.id}><Td><Input size="sm" defaultValue={c.name} onBlur={(e) => connUpdateMut.mutate({ id: c.id, payload: { name: e.target.value } })} /></Td><Td>{c.engine}</Td><Td><Input size="sm" defaultValue={c.host} onBlur={(e) => connUpdateMut.mutate({ id: c.id, payload: { host: e.target.value } })} /></Td><Td><Input size="sm" defaultValue={c.database} onBlur={(e) => connUpdateMut.mutate({ id: c.id, payload: { database: e.target.value } })} /></Td><Td><HStack><Button size="xs" onClick={() => connTestMut.mutate(c.id)}>Test</Button><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'conn', id: c.id }); setConfirmOpen(true); }} /></HStack></Td></Tr>))}{(!conns || conns.length === 0) && <Tr><Td colSpan={5}>Sin conexiones</Td></Tr>}</Tbody></Table>
+						<Table size="sm">
+							<Thead><Tr><Th>Nombre</Th><Th>Engine</Th><Th>Host</Th><Th>DB</Th><Th>Acciones</Th></Tr></Thead>
+							<Tbody>
+								{(conns || []).map((c: any) => {
+									const isEditing = editingConnId === c.id;
+									return (
+										<Tr key={c.id}>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedConn?.name ?? c.name} onChange={(e) => setEditedConn({ ...(editedConn || {}), name: e.target.value })} />
+												) : (<Text>{c.name}</Text>)}
+											</Td>
+											<Td>{c.engine}</Td>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedConn?.host ?? c.host} onChange={(e) => setEditedConn({ ...(editedConn || {}), host: e.target.value })} />
+												) : (<Text>{c.host}</Text>)}
+											</Td>
+											<Td>
+												{isEditing ? (
+													<Input size="sm" value={editedConn?.database ?? c.database} onChange={(e) => setEditedConn({ ...(editedConn || {}), database: e.target.value })} />
+												) : (<Text>{c.database}</Text>)}
+											</Td>
+											<Td>
+												{!isEditing ? (
+													<HStack>
+														<Button size="xs" onClick={() => connTestMut.mutate(c.id)}>Test</Button>
+														<IconButton aria-label="Editar" size="sm" icon={<EditIcon />} onClick={() => { setEditingConnId(c.id); setEditedConn({ name: c.name, host: c.host, database: c.database }); }} />
+														<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { setConfirmItem({ type: 'conn', id: c.id }); setConfirmOpen(true); }} />
+													</HStack>
+												) : (
+													<HStack>
+														<Button size="sm" colorScheme="blue" onClick={() => connUpdateMut.mutate({ id: c.id, payload: editedConn })}>Guardar</Button>
+														<Button size="sm" variant="ghost" onClick={() => { setEditingConnId(null); setEditedConn(null); }}>Cancelar</Button>
+													</HStack>
+												)}
+											</Td>
+										</Tr>
+								);
+								})}
+								{(!conns || conns.length === 0) && <Tr><Td colSpan={5}>Sin conexiones</Td></Tr>}
+							</Tbody>
+						</Table>
 					</TabPanel>
 					<TabPanel>Registro y versionado de scripts (pendiente)</TabPanel>
 				</TabPanels>
