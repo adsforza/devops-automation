@@ -4,6 +4,22 @@ import { ApiError } from '../../common/errors.js';
 import { secretCipher } from '../../common/crypto.js';
 import { writeAuditLog } from '../audit/service.js';
 
+async function resolveActorId(userId: string | undefined | null): Promise<string> {
+	if (userId) {
+		const exists = await prisma.user.findUnique({ where: { id: userId } });
+		if (exists) return userId;
+	}
+	// Ensure a system user exists
+	const systemEmail = 'system@example.com';
+	const systemExternal = 'system';
+	const system = await prisma.user.upsert({
+		where: { email: systemEmail },
+		update: {},
+		create: { externalId: systemExternal, email: systemEmail, displayName: 'System', status: 'active' },
+	});
+	return system.id;
+}
+
 export async function startExecution(scriptId: string, dbConnectionId: string, params: Record<string, unknown>, userId: string) {
 	const script = await prisma.script.findUnique({ where: { id: scriptId }, include: { params: true } });
 	if (!script) throw new ApiError(404, 'Script not found', 'ScriptNotFound');
@@ -22,17 +38,18 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 	}
 
 	const sqlText = Buffer.from(version.sqlTextEnc, 'base64').toString('utf8');
+	const actorId = await resolveActorId(userId);
 
 	const execution = await prisma.execution.create({ data: {
 		scriptId: script.id,
 		scriptVersionId: version.id,
 		dbConnectionId,
-		userId,
+		userId: actorId,
 		paramsJson: params as any,
 		status: 'running',
 		startedAt: new Date(),
 	}});
-	await writeAuditLog({ action: 'execution.start', resourceType: 'execution', resourceId: execution.id, userId, metadata: { scriptId, dbConnectionId } });
+	await writeAuditLog({ action: 'execution.start', resourceType: 'execution', resourceId: execution.id, userId: actorId, metadata: { scriptId, dbConnectionId } });
 
 	const username = secretCipher.decrypt(conn.usernameEnc);
 	const password = secretCipher.decrypt(conn.passwordEnc);
@@ -62,7 +79,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			durationMs,
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: `Rows: ${result.rowCount}` } });
-		await writeAuditLog({ action: 'execution.succeeded', resourceType: 'execution', resourceId: execution.id, userId, metadata: { rowCount: result.rowCount } });
+		await writeAuditLog({ action: 'execution.succeeded', resourceType: 'execution', resourceId: execution.id, userId: actorId, metadata: { rowCount: result.rowCount } });
 		return { id: execution.id };
 	} catch (err: any) {
 		await safeRollback(client);
@@ -73,7 +90,7 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			errorMessage: String(err?.message || err),
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'error', message: String(err?.message || err) } });
-		await writeAuditLog({ action: 'execution.failed', resourceType: 'execution', resourceId: execution.id, userId, metadata: { error: String(err?.message || err) } });
+		await writeAuditLog({ action: 'execution.failed', resourceType: 'execution', resourceId: execution.id, userId: actorId, metadata: { error: String(err?.message || err) } });
 		throw new ApiError(400, `Execution failed: ${String(err?.message || err)}`, 'ExecutionFailed');
 	} finally {
 		await client.end().catch(() => {});
