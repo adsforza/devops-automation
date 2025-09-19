@@ -465,7 +465,14 @@ function RolePermsEditor({ roleId, modal, onClose }: { roleId: string; modal?: b
 	const [procExec, setProcExec] = useState<Record<string, boolean>>({});
 	const [schemaFilter, setSchemaFilter] = useState('');
 	const [nameFilter, setNameFilter] = useState('');
-	const saveMut = useMutation({ mutationFn: (payload: any) => rolePermsSet(roleId, payload), onSuccess: () => { toast({ title: 'Permisos guardados', status: 'success' }); qc.invalidateQueries({ queryKey: ['role-perms', roleId, connectionId] }); } });
+	const saveMut = useMutation({ mutationFn: (payload: any) => rolePermsSet(roleId, payload), onSuccess: () => { toast({ title: 'Permisos guardados', status: 'success' }); qc.invalidateQueries({ queryKey: ['role-perms', roleId, connectionId] }); if (modal && onClose) onClose(); } });
+
+	// Seleccionar la primera conexión por defecto al abrir
+	useEffect(() => {
+		if (!connectionId && connections && connections.length > 0) {
+			setConnectionId(connections[0].id);
+		}
+	}, [connections]);
 
 	useEffect(() => {
 		if (!current) return;
@@ -490,27 +497,49 @@ function RolePermsEditor({ roleId, modal, onClose }: { roleId: string; modal?: b
 
 	const filteredTables = (tables || []).filter((t: any) => (!schemaFilter || t.schema.includes(schemaFilter)) && (!nameFilter || t.name.includes(nameFilter)));
 	const filteredProcs = (procs || []).filter((p: any) => (!schemaFilter || p.schema.includes(schemaFilter)) && (!nameFilter || p.name.includes(nameFilter)));
+	const currentConnName = connections.find((c: any) => c.id === connectionId)?.name || '';
 
 	return (
 		<Box>
-			<HStack mb={2}>
+			<HStack mb={2} wrap="wrap">
 				<FormControl maxW="md"><FormLabel>Conexión</FormLabel><Select value={connectionId} onChange={(e) => setConnectionId(e.target.value)} placeholder="Selecciona">{connections.map((c: any) => (<option key={c.id} value={c.id}>{c.name}</option>))}</Select></FormControl>
 				<FormControl maxW="xs"><FormLabel>Esquema</FormLabel><Input value={schemaFilter} onChange={(e) => setSchemaFilter(e.target.value)} placeholder="public" /></FormControl>
 				<FormControl maxW="xs"><FormLabel>Nombre</FormLabel><Input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="users" /></FormControl>
-				<Button onClick={() => saveMut.mutate({ connectionId, tablePermissions: Object.entries(tableOps).map(([fqdn, ops]) => ({ fqdn, operations: ops })), procPermissions: Object.entries(procExec).map(([fqdn, allowed]) => ({ fqdn, allowed })) })} isDisabled={!connectionId} colorScheme="blue" size="sm">Guardar</Button>
-				{modal && <Button variant="ghost" onClick={onClose} size="sm">Cerrar</Button>}
-			</HStack>
-			{connectionId && (
-				<HStack align="start" spacing={8}>
-					<Box flex="1">
-						<Heading size="sm" mb={2}>Tablas</Heading>
-						<Table size="sm"><Thead><Tr><Th>Tabla</Th><Th>Permisos</Th></Tr></Thead><Tbody>{filteredTables.map((t: any) => { const fqdn = t.fqdn; const selected = tableOps[fqdn] || []; const toggle = (op: string) => { const set = new Set(selected); set.has(op) ? set.delete(op) : set.add(op); setTableOps({ ...tableOps, [fqdn]: Array.from(set) }); }; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><HStack><Checkbox isChecked={selected.includes('INSERT')} onChange={() => toggle('INSERT')}>INSERT</Checkbox><Checkbox isChecked={selected.includes('UPDATE')} onChange={() => toggle('UPDATE')}>UPDATE</Checkbox><Checkbox isChecked={selected.includes('DELETE')} onChange={() => toggle('DELETE')}>DELETE</Checkbox></HStack></Td></Tr>); })}</Tbody></Table>
-					</Box>
-					<Box flex="1">
-						<Heading size="sm" mb={2}>Stored procedures/funciones</Heading>
-						<Table size="sm"><Thead><Tr><Th>Nombre</Th><Th>EXECUTE</Th></Tr></Thead><Tbody>{filteredProcs.map((p: any) => { const fqdn = p.fqdn; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><Checkbox isChecked={!!procExec[fqdn]} onChange={(e) => setProcExec({ ...procExec, [fqdn]: e.target.checked })}>EXECUTE</Checkbox></Td></Tr>); })}</Tbody></Table>
-					</Box>
+				<HStack>
+					<Button onClick={() => saveMut.mutate({ connectionId, tablePermissions: Object.entries(tableOps).map(([fqdn, ops]) => ({ fqdn, operations: ops })), procPermissions: Object.entries(procExec).map(([fqdn, allowed]) => ({ fqdn, allowed })) })} isDisabled={!connectionId} colorScheme="blue" size="sm">Guardar</Button>
+					{modal && <Button variant="ghost" onClick={onClose} size="sm">Cerrar</Button>}
 				</HStack>
+			</HStack>
+
+			{connectionId && (
+				<>
+					<Heading size="sm" mt={2} mb={2}>Permisos actuales ({currentConnName})</Heading>
+					<Table size="sm" mb={3}>
+						<Thead><Tr><Th>Base de datos</Th><Th>Recurso</Th><Th>Permisos</Th></Tr></Thead>
+						<Tbody>
+							{Object.entries(tableOps).filter(([, ops]) => (ops as string[]).length > 0).map(([fqdn, ops]) => (
+								<Tr key={`t-${fqdn}`}><Td>{currentConnName}</Td><Td>{fqdn}</Td><Td>{(ops as string[]).join(', ')}</Td></Tr>
+							))}
+							{Object.entries(procExec).filter(([, allowed]) => allowed).map(([fqdn]) => (
+								<Tr key={`p-${fqdn}`}><Td>{currentConnName}</Td><Td>{fqdn}</Td><Td>EXECUTE</Td></Tr>
+							))}
+							{Object.keys(tableOps).filter((k) => (tableOps[k] || []).length > 0).length === 0 && Object.keys(procExec).filter((k) => procExec[k]).length === 0 && (
+								<Tr><Td colSpan={3}>Sin permisos seleccionados</Td></Tr>
+							)}
+						</Tbody>
+					</Table>
+
+					<HStack align="start" spacing={8}>
+						<Box flex="1">
+							<Heading size="sm" mb={2}>Tablas</Heading>
+							<Table size="sm"><Thead><Tr><Th>Tabla</Th><Th>Permisos</Th></Tr></Thead><Tbody>{filteredTables.map((t: any) => { const fqdn = t.fqdn; const selected = tableOps[fqdn] || []; const toggle = (op: string) => { const set = new Set(selected); set.has(op) ? set.delete(op) : set.add(op); setTableOps({ ...tableOps, [fqdn]: Array.from(set) }); }; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><HStack><Checkbox isChecked={selected.includes('INSERT')} onChange={() => toggle('INSERT')}>INSERT</Checkbox><Checkbox isChecked={selected.includes('UPDATE')} onChange={() => toggle('UPDATE')}>UPDATE</Checkbox><Checkbox isChecked={selected.includes('DELETE')} onChange={() => toggle('DELETE')}>DELETE</Checkbox></HStack></Td></Tr>); })}</Tbody></Table>
+						</Box>
+						<Box flex="1">
+							<Heading size="sm" mb={2}>Stored procedures/funciones</Heading>
+							<Table size="sm"><Thead><Tr><Th>Nombre</Th><Th>EXECUTE</Th></Tr></Thead><Tbody>{filteredProcs.map((p: any) => { const fqdn = p.fqdn; return (<Tr key={fqdn}><Td>{fqdn}</Td><Td><Checkbox isChecked={!!procExec[fqdn]} onChange={(e) => setProcExec({ ...procExec, [fqdn]: e.target.checked })}>EXECUTE</Checkbox></Td></Tr>); })}</Tbody></Table>
+						</Box>
+					</HStack>
+				</>
 			)}
 		</Box>
 	);
