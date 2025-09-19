@@ -1,8 +1,13 @@
-import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure, Code } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection, listMetadataTables, listMetadataProcs, rolePermsGet, rolePermsSet, scriptsList, scriptsCreate, scriptsUpdate, scriptsDelete, scriptsAddVersion, scriptsSetConnections, scriptsSetParameters } from '../../lib/api';
 import { useRef, useState, useEffect } from 'react';
 import { DeleteIcon, EditIcon } from '@chakra-ui/icons';
+
+// Helper to decode base64 (sqlTextEnc placeholder)
+function b64decode(b64: string) {
+	try { return atob(b64); } catch { return ''; }
+}
 
 function RolesPopoverEditor({ roles, value, onChange, isDisabled }: { roles: any[]; value: string[]; onChange: (v: string[]) => void; isDisabled?: boolean }) {
 	return (
@@ -45,6 +50,7 @@ export function AdminPage() {
 	const invalidateUsers = () => qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'users' });
 	const [emailError, setEmailError] = useState<string | null>(null);
 	const [nameError, setNameError] = useState<string | null>(null);
+	const { isOpen: isUserModalOpen, onOpen: onUserModalOpen, onClose: onUserModalClose } = useDisclosure();
 
 	// Edit mode state for users
 	const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -162,11 +168,8 @@ export function AdminPage() {
 				</TabList>
 				<TabPanels>
 					<TabPanel>
-						<HStack mb={4} spacing={4} align="flex-end">
-							<FormControl maxW="sm" isInvalid={!!emailError}><FormLabel>Email</FormLabel><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" /><FormErrorMessage>{emailError}</FormErrorMessage></FormControl>
-							<FormControl maxW="sm" isInvalid={!!nameError}><FormLabel>Nombre</FormLabel><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre Apellido" /><FormErrorMessage>{nameError}</FormErrorMessage></FormControl>
-							<FormControl><FormLabel>Roles</FormLabel><CheckboxGroup value={selectedRoleIds} onChange={(v) => setSelectedRoleIds(v as string[])}><Wrap>{(rolesForUsers || []).map((r: any) => (<WrapItem key={r.id}><Checkbox value={r.id}>{r.name}</Checkbox></WrapItem>))}</Wrap></CheckboxGroup></FormControl>
-							<Button colorScheme="blue" onClick={handleCreateUser} isLoading={createMut.isPending}>Crear</Button>
+						<HStack mb={4} spacing={4} align="center">
+							<Button colorScheme="blue" onClick={onUserModalOpen}>Nuevo usuario</Button>
 						</HStack>
 						<Table size="sm">
 							<Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Estado</Th><Th>Roles</Th><Th>Acciones</Th></Tr></Thead>
@@ -215,6 +218,20 @@ export function AdminPage() {
 							</Tbody>
 						</Table>
 						<HStack mt={4} justify="flex-end"><Button size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} isDisabled={page === 0}>Anterior</Button><Box>Page {page + 1} / {Math.max(1, Math.ceil(total / limit))}</Box><Button size="sm" onClick={() => setPage((p) => (p + 1) < Math.ceil(total / limit) ? p + 1 : p)} isDisabled={(page + 1) >= Math.ceil(total / limit)}>Siguiente</Button></HStack>
+
+						<Modal isOpen={isUserModalOpen} onClose={onUserModalClose}>
+							<ModalOverlay />
+							<ModalContent>
+								<ModalHeader>Nuevo usuario</ModalHeader>
+								<ModalCloseButton />
+								<ModalBody>
+									<FormControl maxW="sm" isInvalid={!!emailError} mb={3}><FormLabel>Email</FormLabel><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" /><FormErrorMessage>{emailError}</FormErrorMessage></FormControl>
+									<FormControl maxW="sm" isInvalid={!!nameError} mb={3}><FormLabel>Nombre</FormLabel><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre Apellido" /><FormErrorMessage>{nameError}</FormErrorMessage></FormControl>
+									<FormControl><FormLabel>Roles</FormLabel><CheckboxGroup value={selectedRoleIds} onChange={(v) => setSelectedRoleIds(v as string[])}><Wrap>{(rolesForUsers || []).map((r: any) => (<WrapItem key={r.id}><Checkbox value={r.id}>{r.name}</Checkbox></WrapItem>))}</Wrap></CheckboxGroup></FormControl>
+								</ModalBody>
+								<ModalFooter><HStack><Button variant="ghost" onClick={onUserModalClose}>Cancelar</Button><Button colorScheme="blue" onClick={handleCreateUser} isLoading={createMut.isPending}>Crear</Button></HStack></ModalFooter>
+							</ModalContent>
+						</Modal>
 					</TabPanel>
 					<TabPanel>
 						<HStack mb={4} spacing={4} align="center">
@@ -337,6 +354,7 @@ export function AdminPage() {
 											<HStack>
 												<Button size="xs" onClick={() => openEditScript(s)}>Editar</Button>
 												<Button size="xs" onClick={() => scriptsDeleteMut.mutate(s.id)} colorScheme="red">Eliminar</Button>
+												<ScriptCodeButton script={s} />
 											</HStack>
 										</Td>
 									</Tr>
@@ -495,5 +513,27 @@ function RolePermsEditor({ roleId, modal, onClose }: { roleId: string; modal?: b
 				</HStack>
 			)}
 		</Box>
+	);
+}
+
+function ScriptCodeButton({ script }: { script: any }) {
+	const { isOpen, onOpen, onClose } = useDisclosure();
+	const latest = (script.versions || []).sort((a: any, b: any) => b.version - a.version)[0];
+	const code = latest ? b64decode(latest.sqlTextEnc) : '';
+	return (
+		<>
+			<Button size="xs" variant="outline" onClick={onOpen}>Ver código</Button>
+			<Modal isOpen={isOpen} onClose={onClose} size="4xl">
+				<ModalOverlay />
+				<ModalContent>
+					<ModalHeader>Código actual {latest ? `(v${latest.version})` : ''}</ModalHeader>
+					<ModalCloseButton />
+					<ModalBody>
+						<Code display="block" whiteSpace="pre" p={3} w="100%">{code || 'Sin versiones'}</Code>
+					</ModalBody>
+					<ModalFooter><Button onClick={onClose}>Cerrar</Button></ModalFooter>
+				</ModalContent>
+			</Modal>
+		</>
 	);
 }

@@ -11,8 +11,8 @@ export function ExecutePage() {
 	const [preview, setPreview] = useState<string>('');
 
 	const { data: connections } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
-	const { data: scripts } = useQuery({ queryKey: ['scripts'], queryFn: listScripts });
-	const mutation = useMutation({ mutationFn: startExecution, onSuccess: () => toast({ title: 'Ejecución iniciada', status: 'success' }) });
+	const { data: scripts } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
+	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { toast({ title: 'Error al ejecutar', description: e?.message || 'Fallo', status: 'error' }); } });
 
 	const onSubmit = async (values: any) => {
 		setPreview(`-- Vista previa\nScript: ${values.script}\nDB: ${values.connection}\nParams: ${JSON.stringify({ foo: values.foo }, null, 2)}`);
