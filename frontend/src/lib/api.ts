@@ -34,3 +34,18 @@ export async function startExecution(payload: { scriptId: string; dbConnectionId
 	const { data } = await api.post('/executions', payload);
 	return data as { id: string };
 }
+
+export async function listUsers() {
+	const { data } = await api.get('/admin/users');
+	return data.items as any[];
+}
+
+export async function listRoles() {
+	const { data } = await api.get('/admin/users/roles');
+	return data.items as any[];
+}
+
+export async function createUser(payload: { email: string; displayName: string; externalId?: string; roleIds?: string[] }) {
+	const { data } = await api.post('/admin/users', payload);
+	return data;
+}
