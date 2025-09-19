@@ -12,7 +12,7 @@ export function ExecutePage() {
 
 	const { data: connections } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
 	const { data: scripts } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
-	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { toast({ title: 'Error al ejecutar', description: e?.message || 'Fallo', status: 'error' }); } });
+	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); } });
 
 	const selectedScriptId = watch('script') as string | undefined;
 	const selectedScript = useMemo(() => (scripts || []).find((s: any) => s.id === selectedScriptId), [scripts, selectedScriptId]);
