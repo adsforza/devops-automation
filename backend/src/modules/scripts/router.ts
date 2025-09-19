@@ -47,14 +47,15 @@ scriptsRouter.post('/:id/versions', async (req, res) => {
 
 scriptsRouter.put('/:id/connections', async (req, res) => {
 	const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
-	const body = z.object({ connections: z.array(z.string()) }).parse(req.body);
+	const body = z.object({ connections: z.array(z.string().min(1)).default([]) }).parse(req.body);
 	await setScriptConnections(id, body.connections, 'system');
 	res.status(204).send();
 });
 
 scriptsRouter.put('/:id/parameters', async (req, res) => {
 	const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
-	const body = z.object({ params: z.array(z.object({ name: z.string().min(1), type: z.string().min(1), required: z.boolean().optional(), defaultValue: z.string().optional(), validation: z.any().optional(), orderIndex: z.number().int().optional() })) }).parse(req.body);
+	const ParamSchema = z.object({ name: z.string().min(1), type: z.string().min(1), required: z.boolean().optional(), defaultValue: z.string().optional(), validation: z.any().optional(), orderIndex: z.number().int().optional() });
+	const body = z.object({ params: z.array(ParamSchema).default([]) }).parse(req.body);
 	await setScriptParameters(id, body.params, 'system');
 	res.status(204).send();
 });
