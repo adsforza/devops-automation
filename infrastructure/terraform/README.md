@@ -38,3 +38,18 @@ Notas:
 - Para TLS en ALB, agrega listener 443 con ACM y redirección desde 80.
 - Ajusta SGs para restringir orígenes.
 - Considera API Gateway + Lambda si prefieres serverless.
+
+## Integración CI/CD con CodeCommit/CodeBuild/CodePipeline (resumen)
+- Repositorio: CodeCommit con el contenido del monorepo
+- Pipelines sugeridas:
+  - Backend (Docker a ECR): usa `buildspec-backend.yml`, variable SSM `ECR_BACKEND_URL` con el repo de ECR
+  - Frontend (S3/CF): usa `buildspec-frontend.yml`, variable SSM `FRONTEND_BUCKET`
+  - Terraform (infra): usa `buildspec-terraform.yml`, rol con permisos para `plan/apply`
+
+### Pasos
+1) Crear ECR (ya en Terraform: output `ecr_backend_url`). Guardar en SSM `/${project}/${environment}/ecr_backend_url`.
+2) Crear bucket frontend (output `frontend_bucket`) y guardar en SSM `/${project}/${environment}/frontend_bucket`.
+3) Crear proyectos de CodeBuild para cada buildspec; adjuntar roles mínimos (ECR, S3, CloudFront, Terraform).
+4) Crear CodePipeline con fuentes de CodeCommit y stages de Build/Deploy según corresponda.
+
+Ajusta variables `ENV`, roles y permisos según entorno.

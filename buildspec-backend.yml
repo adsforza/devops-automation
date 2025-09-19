@@ -1,0 +1,22 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - export IMAGE_REPO_URI=${ECR_BACKEND_URL}
+      - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $(echo $IMAGE_REPO_URI | cut -d'/' -f1)
+  build:
+    commands:
+      - docker build -t $IMAGE_REPO_URI:$IMAGE_TAG backend
+      - docker tag $IMAGE_REPO_URI:$IMAGE_TAG $IMAGE_REPO_URI:latest
+  post_build:
+    commands:
+      - docker push $IMAGE_REPO_URI:$IMAGE_TAG
+      - docker push $IMAGE_REPO_URI:latest
+artifacts:
+  files:
+    - infrastructure/terraform/**
+  discard-paths: yes
+env:
+  parameter-store:
+    ECR_BACKEND_URL: "/automation/${ENV}/ecr_backend_url"
