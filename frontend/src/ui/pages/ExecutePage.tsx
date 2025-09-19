@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast } from '@chakra-ui/react';
+import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { listConnections, listScripts, startExecution } from '../../lib/api';
@@ -10,25 +10,40 @@ export function ExecutePage() {
 	const { register, handleSubmit, formState: { errors, isSubmitting }, watch, setValue, getValues, reset } = useForm();
 	const [preview, setPreview] = useState<string>('');
 
-	const { data: connections } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
-	const { data: scripts } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
+	const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
+	const { data: scripts = [] } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
 	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); } });
 
 	const selectedScriptId = watch('script') as string | undefined;
-	const selectedScript = useMemo(() => (scripts || []).find((s: any) => s.id === selectedScriptId), [scripts, selectedScriptId]);
+	const selectedConnectionId = watch('connection') as string | undefined;
+	const selectedScript: any = useMemo(() => (scripts || []).find((s: any) => s.id === selectedScriptId), [scripts, selectedScriptId]);
 
-	// Cuando cambia el script seleccionado, setear defaults de parámetros
+	// Allowed connections by script
+	const allowedConnectionIds = useMemo(() => (selectedScript?.dbLinks || []).map((l: any) => l.dbConnectionId) as string[], [selectedScript]);
+	const filteredConnections = useMemo(() => {
+		if (!selectedScript) return connections;
+		return connections.filter((c: any) => allowedConnectionIds.includes(c.id));
+	}, [connections, selectedScript, allowedConnectionIds]);
+	const connectionNotAllowed = !!selectedScript && !!selectedConnectionId && !allowedConnectionIds.includes(selectedConnectionId);
+
+	// When script changes, reset params defaults and clear connection if not allowed
 	useEffect(() => {
 		if (!selectedScript) return;
-		// reset solo params, preservando script y connection actuales
-		const currentConnection = getValues('connection');
-		const base: Record<string, any> = { script: selectedScriptId, connection: currentConnection };
+		const base: Record<string, any> = { script: selectedScriptId, connection: undefined };
 		for (const p of (selectedScript as any).params || []) {
 			const def = (p as any).defaultValue ?? '';
 			base[(p as any).name] = def;
 		}
 		reset(base);
 	}, [selectedScriptId]);
+
+	// Required completeness check
+	const requiredNames = useMemo(() => (selectedScript?.params || []).filter((p: any) => p.required).map((p: any) => p.name) as string[], [selectedScript]);
+	const watchedAll = watch();
+	const requiredFilled = useMemo(() => requiredNames.every((n) => {
+		const v = (watchedAll as any)[n];
+		return v !== undefined && v !== '';
+	}), [requiredNames, watchedAll]);
 
 	function renderParamField(p: any) {
 		const name = p.name as string;
@@ -94,6 +109,8 @@ export function ExecutePage() {
 		onClose();
 	};
 
+	const canSubmit = !!selectedScriptId && !!selectedConnectionId && !connectionNotAllowed && requiredFilled;
+
 	return (
 		<Box>
 			<Heading size="lg" mb={4}>Ejecutar Script</Heading>
@@ -109,8 +126,9 @@ export function ExecutePage() {
 					<FormControl isInvalid={!!errors.connection}>
 						<FormLabel>Conexión</FormLabel>
 						<Select placeholder="Selecciona" {...register('connection', { required: 'Requerido' })}>
-							{(connections || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+							{(filteredConnections || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
 						</Select>
+						{connectionNotAllowed && <FormHelperText color="red.500">El script no está habilitado en esta conexión</FormHelperText>}
 						<FormErrorMessage>{errors.connection?.message as any}</FormErrorMessage>
 					</FormControl>
 				</HStack>
@@ -122,7 +140,7 @@ export function ExecutePage() {
 					</Box>
 				)}
 
-				<Button type="submit" colorScheme="blue" isLoading={isSubmitting}>Previsualizar</Button>
+				<Button type="submit" colorScheme="blue" isLoading={isSubmitting} isDisabled={!canSubmit}>Previsualizar</Button>
 			</form>
 
 			{preview && (
@@ -139,7 +157,7 @@ export function ExecutePage() {
 					<ModalBody>¿Deseas ejecutar este script con los parámetros indicados?</ModalBody>
 					<ModalFooter>
 						<Button onClick={onClose} variant="ghost">Cancelar</Button>
-						<Button colorScheme="blue" onClick={onConfirm} isLoading={mutation.isPending}>Ejecutar</Button>
+						<Button colorScheme="blue" onClick={onConfirm} isLoading={mutation.isPending} isDisabled={!canSubmit}>Ejecutar</Button>
 					</ModalFooter>
 				</ModalContent>
 			</Modal>
