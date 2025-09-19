@@ -115,6 +115,28 @@ export function AdminPage() {
 	const [editingConnId, setEditingConnId] = useState<string | null>(null);
 	const [editedConn, setEditedConn] = useState<any | null>(null);
 
+	// Scripts state
+	const { data: scripts } = useQuery({ queryKey: ['scripts-all'], queryFn: scriptsList });
+	const scriptsCreateMut = useMutation({ mutationFn: scriptsCreate, onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Script creado', status: 'success' }); } });
+	const scriptsUpdateMut = useMutation({ mutationFn: ({ id, payload }: any) => scriptsUpdate(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Script actualizado', status: 'success' }); } });
+	const scriptsDeleteMut = useMutation({ mutationFn: (id: string) => scriptsDelete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Script eliminado', status: 'success' }); } });
+	const scriptsAddVersionMut = useMutation({ mutationFn: ({ id, sqlText }: any) => scriptsAddVersion(id, { sqlText }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Versión creada', status: 'success' }); } });
+	const scriptsSetConnectionsMut = useMutation({ mutationFn: ({ id, connections }: any) => scriptsSetConnections(id, connections), onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Conexiones actualizadas', status: 'success' }); } });
+	const scriptsSetParametersMut = useMutation({ mutationFn: ({ id, params }: any) => scriptsSetParameters(id, params), onSuccess: () => { qc.invalidateQueries({ queryKey: ['scripts-all'] }); toast({ title: 'Parámetros actualizados', status: 'success' }); } });
+	const [isScriptModalOpen, setScriptModalOpen] = useState(false);
+	const [editingScript, setEditingScript] = useState<any | null>(null);
+	const [scriptForm, setScriptForm] = useState<any>({ key: '', name: '', description: '', params: [], connections: [] });
+	const [newSql, setNewSql] = useState('');
+
+	function openCreateScript() { setEditingScript(null); setScriptForm({ key: '', name: '', description: '', params: [], connections: [] }); setScriptModalOpen(true); }
+	function openEditScript(s: any) { setEditingScript(s); setScriptForm({ key: s.key, name: s.name, description: s.description || '', params: s.params || [], connections: (s.dbLinks || []).map((l: any) => l.dbConnectionId) }); setScriptModalOpen(true); }
+	function saveScript() {
+		if (!scriptForm.name || (!editingScript && !scriptForm.key)) { toast({ title: 'Nombre y clave requeridos', status: 'warning' }); return; }
+		if (!editingScript) scriptsCreateMut.mutate({ key: scriptForm.key, name: scriptForm.name, description: scriptForm.description, params: scriptForm.params, connections: scriptForm.connections });
+		else scriptsUpdateMut.mutate({ id: editingScript.id, payload: { name: scriptForm.name, description: scriptForm.description } });
+		setScriptModalOpen(false);
+	}
+
 	function handleCreateUser() {
 		let ok = true;
 		if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setEmailError('Email inválido'); ok = false; } else { setEmailError(null); }
@@ -299,7 +321,83 @@ export function AdminPage() {
 							</Tbody>
 						</Table>
 					</TabPanel>
-					<TabPanel>Registro y versionado de scripts (pendiente)</TabPanel>
+					<TabPanel>
+						<HStack mb={4} spacing={4} align="center">
+							<Button colorScheme="blue" onClick={openCreateScript}>Nuevo script</Button>
+						</HStack>
+						<Table size="sm">
+							<Thead><Tr><Th>Clave</Th><Th>Nombre</Th><Th>Conexiones</Th><Th>Versiones</Th><Th>Acciones</Th></Tr></Thead>
+							<Tbody>
+								{(scripts || []).map((s: any) => (
+									<Tr key={s.id}>
+										<Td>{s.key}</Td>
+										<Td>{s.name}</Td>
+										<Td>{(s.dbLinks || []).length}</Td>
+										<Td>{(s.versions || []).length}</Td>
+										<Td>
+											<HStack>
+												<Button size="xs" onClick={() => openEditScript(s)}>Editar</Button>
+												<Button size="xs" onClick={() => scriptsDeleteMut.mutate(s.id)} colorScheme="red">Eliminar</Button>
+											</HStack>
+										</Td>
+									</Tr>
+								))}
+								{(!scripts || scripts.length === 0) && <Tr><Td colSpan={5}>Sin scripts</Td></Tr>}
+							</Tbody>
+						</Table>
+
+						<Modal isOpen={isScriptModalOpen} onClose={() => setScriptModalOpen(false)} size="4xl">
+							<ModalOverlay />
+							<ModalContent>
+								<ModalHeader>{editingScript ? 'Editar script' : 'Nuevo script'}</ModalHeader>
+								<ModalCloseButton />
+								<ModalBody>
+									<HStack spacing={4} align="flex-start">
+										<Box flex="1">
+											<FormControl isDisabled={!!editingScript} mb={3}><FormLabel>Clave</FormLabel><Input value={scriptForm.key} onChange={(e) => setScriptForm({ ...scriptForm, key: e.target.value })} /></FormControl>
+											<FormControl mb={3}><FormLabel>Nombre</FormLabel><Input value={scriptForm.name} onChange={(e) => setScriptForm({ ...scriptForm, name: e.target.value })} /></FormControl>
+											<FormControl mb={3}><FormLabel>Descripción</FormLabel><Input value={scriptForm.description} onChange={(e) => setScriptForm({ ...scriptForm, description: e.target.value })} /></FormControl>
+											<FormControl mb={3}><FormLabel>Conexiones</FormLabel><Select multiple value={scriptForm.connections} onChange={(e) => setScriptForm({ ...scriptForm, connections: Array.from(e.target.selectedOptions).map((o) => o.value) })}>{(conns || []).map((c: any) => (<option key={c.id} value={c.id}>{c.name}</option>))}</Select></FormControl>
+										</Box>
+										<Box flex="1">
+											<FormControl mb={3}><FormLabel>Parámetros</FormLabel>
+												<Box borderWidth="1px" borderRadius="md" p={2}>
+													{(scriptForm.params || []).map((p: any, idx: number) => (
+														<HStack key={idx} mb={2}>
+															<Input placeholder="nombre" value={p.name} onChange={(e) => { const arr = [...scriptForm.params]; arr[idx] = { ...arr[idx], name: e.target.value }; setScriptForm({ ...scriptForm, params: arr }); }} />
+															<Select value={p.type} onChange={(e) => { const arr = [...scriptForm.params]; arr[idx] = { ...arr[idx], type: e.target.value }; setScriptForm({ ...scriptForm, params: arr }); }}>
+																<option value="string">string</option>
+																<option value="number">number</option>
+																<option value="boolean">boolean</option>
+																<option value="date">date</option>
+																<option value="json">json</option>
+															</Select>
+															<Checkbox isChecked={!!p.required} onChange={(e) => { const arr = [...scriptForm.params]; arr[idx] = { ...arr[idx], required: e.target.checked }; setScriptForm({ ...scriptForm, params: arr }); }}>Requerido</Checkbox>
+															<IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => { const arr = [...scriptForm.params]; arr.splice(idx, 1); setScriptForm({ ...scriptForm, params: arr }); }} />
+														</HStack>
+													))}
+													<Button size="sm" onClick={() => setScriptForm({ ...scriptForm, params: [...(scriptForm.params || []), { name: '', type: 'string', required: false }] })}>Agregar parámetro</Button>
+												</Box>
+											</FormControl>
+											{editingScript && (
+												<FormControl>
+													<FormLabel>Nueva versión (SQL)</FormLabel>
+													<Input as="textarea" value={newSql} onChange={(e) => setNewSql((e.target as any).value)} />
+													<Button size="sm" mt={2} onClick={() => { scriptsAddVersionMut.mutate({ id: editingScript.id, sqlText: newSql }); setNewSql(''); }}>Crear versión</Button>
+												</FormControl>
+											)}
+										</Box>
+									</HStack>
+								</ModalBody>
+								<ModalFooter>
+									<HStack spacing={3}>
+										<Button variant="ghost" onClick={() => setScriptModalOpen(false)}>Cancelar</Button>
+										<Button colorScheme="blue" onClick={saveScript}>Guardar</Button>
+									</HStack>
+								</ModalFooter>
+							</ModalContent>
+						</Modal>
+					</TabPanel>
 				</TabPanels>
 			</Tabs>
 

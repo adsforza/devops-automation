@@ -36,3 +36,11 @@ export async function rolePermsSet(roleId: string, payload: { connectionId: stri
 
 export async function changesList(params: { table?: string; pk?: string; userId?: string; from?: string; to?: string; limit?: number; offset?: number } = {}) { const { data } = await api.get('/changes', { params }); return data as { items: any[]; total: number }; }
 export async function changesByPk(table: string, pk: string) { const { data } = await api.get(`/changes/${table}/${pk}`); return data.items as any[]; }
+
+export async function scriptsList() { const { data } = await api.get('/scripts'); return data.items as any[]; }
+export async function scriptsCreate(payload: any) { const { data } = await api.post('/scripts', payload); return data; }
+export async function scriptsUpdate(id: string, payload: any) { const { data } = await api.put(`/scripts/${id}`, payload); return data; }
+export async function scriptsDelete(id: string) { await api.delete(`/scripts/${id}`); }
+export async function scriptsAddVersion(id: string, payload: { sqlText: string }) { const { data } = await api.post(`/scripts/${id}/versions`, payload); return data; }
+export async function scriptsSetConnections(id: string, connections: string[]) { await api.put(`/scripts/${id}/connections`, { connections }); }
+export async function scriptsSetParameters(id: string, params: any[]) { await api.put(`/scripts/${id}/parameters`, { params }); }
