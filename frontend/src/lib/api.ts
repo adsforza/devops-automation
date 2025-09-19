@@ -35,9 +35,9 @@ export async function startExecution(payload: { scriptId: string; dbConnectionId
 	return data as { id: string };
 }
 
-export async function listUsers() {
-	const { data } = await api.get('/admin/users');
-	return data.items as any[];
+export async function listUsersPaged(params: { limit?: number; offset?: number } = {}) {
+	const { data } = await api.get('/admin/users', { params });
+	return data as { items: any[]; total: number };
 }
 
 export async function listRoles() {
@@ -52,6 +52,11 @@ export async function createUser(payload: { email: string; displayName: string; 
 
 export async function updateUser(id: string, payload: { displayName?: string; roleIds?: string[] }) {
 	const { data } = await api.put(`/admin/users/${id}`, payload);
+	return data;
+}
+
+export async function updateUserStatus(id: string, status: 'active' | 'disabled') {
+	const { data } = await api.post(`/admin/users/${id}/status`, { status });
 	return data;
 }
 

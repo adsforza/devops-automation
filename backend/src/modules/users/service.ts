@@ -3,8 +3,17 @@ import { ApiError } from '../../common/errors.js';
 import { CreateUserInput, UpdateUserInput } from './validation.js';
 import { writeAuditLog } from '../audit/service.js';
 
-export async function listUsers() {
-	return prisma.user.findMany({ orderBy: { createdAt: 'desc' }, include: { roles: { include: { role: true } } } });
+export async function listUsers(p: { limit: number; offset: number }) {
+	const [items, total] = await Promise.all([
+		prisma.user.findMany({
+			orderBy: { createdAt: 'desc' },
+			include: { roles: { include: { role: true } } },
+			take: p.limit,
+			skip: p.offset,
+		}),
+		prisma.user.count(),
+	]);
+	return { items, total };
 }
 
 export async function listRoles() {
@@ -40,6 +49,14 @@ export async function updateUser(id: string, input: UpdateUserInput, updatedBy: 
 		}
 	}
 	await writeAuditLog({ action: 'user.update', resourceType: 'user', resourceId: id, userId: updatedBy, before, after: { user } });
+	return user;
+}
+
+export async function updateUserStatus(id: string, status: 'active' | 'disabled', updatedBy: string) {
+	const before = await prisma.user.findUnique({ where: { id } });
+	if (!before) throw new ApiError(404, 'User not found', 'UserNotFound');
+	const user = await prisma.user.update({ where: { id }, data: { status } });
+	await writeAuditLog({ action: 'user.status', resourceType: 'user', resourceId: id, userId: updatedBy, before, after: { user } });
 	return user;
 }
 
