@@ -1,9 +1,8 @@
 import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton, Select, AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader, AlertDialogBody, AlertDialogFooter, FormErrorMessage, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection } from '../../lib/api';
+import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus, rolesListAll, rolesCreate, rolesUpdate, rolesDelete, listConnections, createConnection, updateConnection, deleteConnection, testConnection, listMetadataTables, listMetadataProcs, rolePermsGet, rolePermsSet, scriptsList, scriptsCreate, scriptsUpdate, scriptsDelete, scriptsAddVersion, scriptsSetConnections, scriptsSetParameters } from '../../lib/api';
 import { useRef, useState, useEffect } from 'react';
 import { DeleteIcon, EditIcon } from '@chakra-ui/icons';
-import { listMetadataTables, listMetadataProcs, rolePermsGet, rolePermsSet } from '../../lib/api';
 
 function RolesPopoverEditor({ roles, value, onChange, isDisabled }: { roles: any[]; value: string[]; onChange: (v: string[]) => void; isDisabled?: boolean }) {
 	return (
