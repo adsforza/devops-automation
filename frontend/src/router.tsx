@@ -4,6 +4,7 @@ import { DashboardPage } from './ui/pages/DashboardPage';
 import { ExecutePage } from './ui/pages/ExecutePage';
 import { AdminPage } from './ui/pages/AdminPage';
 import { AuditPage } from './ui/pages/AuditPage';
+import { ChangesPage } from './ui/pages/ChangesPage';
 
 export const router = createBrowserRouter([
 	{
@@ -14,6 +15,7 @@ export const router = createBrowserRouter([
 			{ path: 'execute', element: <ExecutePage /> },
 			{ path: 'admin', element: <AdminPage /> },
 			{ path: 'audit', element: <AuditPage /> },
+			{ path: 'changes', element: <ChangesPage /> },
 		],
 	},
 ]);

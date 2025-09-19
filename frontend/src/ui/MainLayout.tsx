@@ -16,6 +16,7 @@ export function MainLayout() {
 							<Link as={RouterLink} to="/execute">Ejecutar</Link>
 							<Link as={RouterLink} to="/admin">Admin</Link>
 							<Link as={RouterLink} to="/audit">Auditoría</Link>
+							<Link as={RouterLink} to="/changes">Cambios</Link>
 						</HStack>
 						<Spacer />
 						<HStack>
