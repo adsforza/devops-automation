@@ -37,8 +37,12 @@ export async function writeAuditLog(entry: {
 		after: entry.after || null,
 	};
 	const currHash = computeHash(prevHash, payload);
+
+	// Only persist FK to User if it looks like a real app user id
+	const userIdForFk = entry.userId && entry.userId !== 'system' ? entry.userId : undefined;
+
 	const saved = await prisma.auditLog.create({ data: {
-		userId: payload.userId || undefined,
+		userId: userIdForFk,
 		ip: payload.ip || undefined,
 		userAgent: payload.userAgent || undefined,
 		action: payload.action,
@@ -57,10 +61,9 @@ export async function writeAuditLog(entry: {
 		s3.send(new PutObjectCommand({
 			Bucket: env.AUDIT_S3_BUCKET,
 			Key: key,
-			Body: Buffer.from(JSON.stringify({ ...payload, prevHash, currHash }), 'utf8'),
+			Body: Buffer.from(JSON.stringify({ ...payload, prevHash, curr_hash: currHash }), 'utf8'),
 			ContentType: 'application/json',
 			ServerSideEncryption: 'aws:kms',
-			// KMS key taken from bucket policy or default
 		})).catch(() => {});
 	}
 	return saved;
