@@ -4,28 +4,37 @@ Recursos principales:
 - KMS CMK por entorno (alias `${project}-${environment}-cmk`)
 - S3 auditoría con Object Lock (WORM) y SSE-KMS
 - RDS PostgreSQL 16 en subredes privadas (encriptado con KMS)
+- Backend: ECS Fargate + ALB + WAF (listener HTTP 80 demo; usar ACM 443 en prod)
+- Frontend: S3 + CloudFront (OAC)
 
 ## Prerrequisitos
 - Terraform >= 1.6
-- Credenciales AWS (perfil o variables)
-- VPC y subredes privadas existentes (pasar `vpc_id` y `private_subnet_ids`)
+- Credenciales AWS
+- VPC y subredes privadas (`vpc_id`, `private_subnet_ids`)
 
 ## Variables clave
-- `project` (default `automation`)
-- `environment` (default `dev`)
-- `region` (default `us-east-1`)
+- `project`, `environment`, `region`
 - `db_username`, `db_password`
-- `vpc_id`, `private_subnet_ids`
+- `backend_image` (ECR imagen del backend)
 
-## Uso
+## Pasos
 ```bash
 cd infrastructure/terraform
 terraform init
-terraform plan -var "vpc_id=vpc-xxxxxxxx" -var 'private_subnet_ids=["subnet-aaa","subnet-bbb"]' -var "db_password=StrongPass!" -out tfplan
+terraform plan \
+  -var "vpc_id=vpc-xxx" \
+  -var 'private_subnet_ids=["subnet-a","subnet-b"]' \
+  -var "db_password=StrongPass!" \
+  -var "backend_image=xxxxxxxx.dkr.ecr.us-east-1.amazonaws.com/automation-backend:latest" \
+  -out tfplan
 terraform apply tfplan
 ```
 
 ## Outputs
 - `kms_key_arn`, `audit_bucket`, `rds_endpoint`
+- `alb_dns` (backend público demo), `frontend_bucket`, `frontend_cdn_domain`
 
-Integra estos outputs en el backend `.env` (`KMS_KEY_ID`, `AUDIT_S3_BUCKET`, `DATABASE_URL`).
+Notas:
+- Para TLS en ALB, agrega listener 443 con ACM y redirección desde 80.
+- Ajusta SGs para restringir orígenes.
+- Considera API Gateway + Lambda si prefieres serverless.
