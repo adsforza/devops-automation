@@ -1,8 +1,34 @@
-import { Box, Button, FormControl, FormLabel, Heading, Input, Select, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Heading, Input, Tab, TabList, TabPanel, TabPanels, Tabs, Table, Thead, Tr, Th, Tbody, Td, HStack, useToast, IconButton, Badge, Checkbox, CheckboxGroup, Wrap, WrapItem, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverBody, PopoverArrow, PopoverCloseButton } from '@chakra-ui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listRoles, listUsersPaged, updateUser, updateUserStatus } from '../../lib/api';
 import { useState } from 'react';
 import { DeleteIcon } from '@chakra-ui/icons';
+
+function RolesPopoverEditor({ roles, value, onChange }: { roles: any[]; value: string[]; onChange: (v: string[]) => void }) {
+	return (
+		<Popover placement="bottom-start">
+			<PopoverTrigger>
+				<Button size="xs" variant="outline">Roles ({value.length})</Button>
+			</PopoverTrigger>
+			<PopoverContent w="sm">
+				<PopoverArrow />
+				<PopoverCloseButton />
+				<PopoverHeader>Selecciona roles</PopoverHeader>
+				<PopoverBody>
+					<CheckboxGroup value={value} onChange={(v) => onChange(v as string[])}>
+						<Wrap>
+							{(roles || []).map((r: any) => (
+								<WrapItem key={r.id}>
+									<Checkbox value={r.id}>{r.name}</Checkbox>
+								</WrapItem>
+							))}
+						</Wrap>
+					</CheckboxGroup>
+				</PopoverBody>
+			</PopoverContent>
+		</Popover>
+	);
+}
 
 export function AdminPage() {
 	const toast = useToast();
@@ -16,10 +42,40 @@ export function AdminPage() {
 	const [email, setEmail] = useState('');
 	const [name, setName] = useState('');
 	const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
-	const createMut = useMutation({ mutationFn: createUser, onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario creado', status: 'success' }); setEmail(''); setName(''); setSelectedRoleIds([]); } });
-	const updateMut = useMutation({ mutationFn: ({ id, payload }: any) => updateUser(id, payload), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario actualizado', status: 'success' }); } });
-	const deleteMut = useMutation({ mutationFn: (id: string) => deleteUser(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast({ title: 'Usuario eliminado', status: 'success' }); } });
-	const statusMut = useMutation({ mutationFn: ({ id, status }: any) => updateUserStatus(id, status), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users', page] }); } });
+	const invalidateUsers = () => qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'users' });
+
+	const createMut = useMutation({
+		mutationFn: createUser,
+		onSuccess: () => {
+			invalidateUsers();
+			setPage(0);
+			toast({ title: 'Usuario creado', status: 'success' });
+			setEmail('');
+			setName('');
+			setSelectedRoleIds([]);
+		},
+	});
+	const updateMut = useMutation({
+		mutationFn: ({ id, payload }: any) => updateUser(id, payload),
+		onSuccess: () => {
+			invalidateUsers();
+			toast({ title: 'Usuario actualizado', status: 'success' });
+		},
+	});
+	const deleteMut = useMutation({
+		mutationFn: (id: string) => deleteUser(id),
+		onSuccess: () => {
+			invalidateUsers();
+			toast({ title: 'Usuario eliminado', status: 'success' });
+		},
+	});
+	const statusMut = useMutation({
+		mutationFn: ({ id, status }: any) => updateUserStatus(id, status),
+		onSuccess: () => {
+			invalidateUsers();
+			toast({ title: 'Estado actualizado', status: 'success' });
+		},
+	});
 
 	return (
 		<Box>
@@ -42,36 +98,41 @@ export function AdminPage() {
 								<FormLabel>Nombre</FormLabel>
 								<Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre Apellido" />
 							</FormControl>
-							<FormControl maxW="sm">
+							<FormControl>
 								<FormLabel>Roles</FormLabel>
-								<Select multiple value={selectedRoleIds} onChange={(e) => setSelectedRoleIds(Array.from(e.target.selectedOptions).map(o => o.value))}>
-									{(roles || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-								</Select>
+								<CheckboxGroup value={selectedRoleIds} onChange={(v) => setSelectedRoleIds(v as string[])}>
+									<Wrap>
+										{(roles || []).map((r: any) => (
+											<WrapItem key={r.id}><Checkbox value={r.id}>{r.name}</Checkbox></WrapItem>
+										))}
+									</Wrap>
+								</CheckboxGroup>
 							</FormControl>
 							<Button colorScheme="blue" onClick={() => createMut.mutate({ email, displayName: name, roleIds: selectedRoleIds })} isLoading={createMut.isPending}>Crear</Button>
 						</HStack>
 						<Table size="sm">
 							<Thead><Tr><Th>Email</Th><Th>Nombre</Th><Th>Estado</Th><Th>Roles</Th><Th>Acciones</Th></Tr></Thead>
 							<Tbody>
-								{users.map((u: any) => (
-									<Tr key={u.id}>
-										<Td>{u.email}</Td>
-										<Td>
-											<Input size="sm" defaultValue={u.displayName} onBlur={(e) => updateMut.mutate({ id: u.id, payload: { displayName: e.target.value } })} />
-										</Td>
-										<Td>{u.status === 'active' ? <Badge colorScheme="green">Activo</Badge> : <Badge>Desactivado</Badge>}
-											<Button size="xs" ml={2} onClick={() => statusMut.mutate({ id: u.id, status: u.status === 'active' ? 'disabled' : 'active' })}>
-												{u.status === 'active' ? 'Desactivar' : 'Activar'}
-											</Button>
-										</Td>
-										<Td>
-											<Select size="sm" multiple defaultValue={(u.roles || []).map((r: any) => r.roleId)} onChange={(e) => updateMut.mutate({ id: u.id, payload: { roleIds: Array.from(e.target.selectedOptions).map(o => o.value) } })}>
-												{(roles || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-											</Select>
-										</Td>
-										<Td><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => deleteMut.mutate(u.id)} /></Td>
-									</Tr>
-								))}
+								{users.map((u: any) => {
+									const currentRoleIds = (u.roles || []).map((r: any) => r.roleId);
+									return (
+										<Tr key={u.id}>
+											<Td>{u.email}</Td>
+											<Td>
+												<Input size="sm" defaultValue={u.displayName} onBlur={(e) => updateMut.mutate({ id: u.id, payload: { displayName: e.target.value } })} />
+											</Td>
+											<Td>{u.status === 'active' ? <Badge colorScheme="green">Activo</Badge> : <Badge>Desactivado</Badge>}
+												<Button size="xs" ml={2} onClick={() => statusMut.mutate({ id: u.id, status: u.status === 'active' ? 'disabled' : 'active' })}>
+													{u.status === 'active' ? 'Desactivar' : 'Activar'}
+												</Button>
+											</Td>
+											<Td>
+												<RolesPopoverEditor roles={roles || []} value={currentRoleIds} onChange={(roleIds) => updateMut.mutate({ id: u.id, payload: { roleIds } })} />
+											</Td>
+											<Td><IconButton aria-label="Eliminar" size="sm" colorScheme="red" icon={<DeleteIcon />} onClick={() => deleteMut.mutate(u.id)} /></Td>
+										</Tr>
+								);
+								})}
 								{users.length === 0 && <Tr><Td colSpan={5}>Sin usuarios</Td></Tr>}
 							</Tbody>
 						</Table>
