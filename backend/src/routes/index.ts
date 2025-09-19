@@ -7,6 +7,7 @@ import { executionsRouter } from '../modules/executions/router.js';
 import { auditRouter } from '../modules/audit/router.js';
 import { authRouter } from './auth.js';
 import { usersRouter } from '../modules/users/router.js';
+import { rolesRouter } from '../modules/roles/router.js';
 
 export const router = Router();
 
@@ -25,6 +26,7 @@ router.use('/scripts', scriptsRouter);
 router.use('/executions', executionsRouter);
 router.use('/audit', auditRouter);
 router.use('/admin/users', usersRouter);
+router.use('/admin/roles', rolesRouter);
 
 router.get('/', (_req, res) => {
 	res.json({ name: 'automation-backend', docs: '/docs' });
