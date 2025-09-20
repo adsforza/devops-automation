@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
+import 'dotenv/config';
 import { loadConfig } from './config';
 import type { DriverTelemetry } from './types';
 import { createSimInitialState, nextSimTick } from './providers/simProvider';
@@ -33,7 +34,11 @@ const f1Provider = cfg.provider === 'f1' && cfg.f1.baseUrl && cfg.f1.eventPath
   : null;
 
 // REST: audio clips (simulated URLs)
-app.get('/api/audio', (_req, res) => {
+app.get('/api/audio', async (_req, res) => {
+  if (f1Provider) {
+    const radios = await f1Provider.fetchLatestTeamRadio(20);
+    return res.json(radios);
+  }
   res.json(audioClips);
 });
 
@@ -58,16 +63,28 @@ app.get('/api/best-laps', (req, res) => {
   req.on('close', () => clearInterval(interval));
 });
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   // Send current snapshot
-  socket.emit('telemetry:snapshot', Object.values(simState.lastTelemetryByDriver));
+  if (f1Provider) {
+    try {
+      const snap = await f1Provider.fetchLatestTelemetry();
+      socket.emit('telemetry:snapshot', snap);
+    } catch (e) {
+      socket.emit('telemetry:snapshot', [] as DriverTelemetry[]);
+    }
+  } else {
+    socket.emit('telemetry:snapshot', Object.values(simState.lastTelemetryByDriver));
+  }
 });
 
 // Simulation loop
 setInterval(() => {
   if (f1Provider) {
-    // Placeholder: would poll or stream official feed; not implemented
-    io.emit('telemetry:update', [] as DriverTelemetry[]);
+    f1Provider.fetchLatestTelemetry()
+      .then((updates) => {
+        if (updates.length) io.emit('telemetry:update', updates);
+      })
+      .catch(() => {})
   } else {
     const updates = nextSimTick(simState);
     if (Math.random() < 0.03 && updates.length > 0) {

@@ -51,6 +51,11 @@ function TrackMap({ cars }: { cars: DriverTelemetry[] }) {
 
   const points = useMemo(() => {
     return cars.map((c) => {
+      if (typeof c.normalizedX === 'number' && typeof c.normalizedY === 'number') {
+        const x = centerX + rx * c.normalizedX
+        const y = centerY + ry * c.normalizedY
+        return { ...c, x, y }
+      }
       const angle = (c.positionOnTrackPct / 100) * 2 * Math.PI
       const x = centerX + rx * Math.cos(angle)
       const y = centerY + ry * Math.sin(angle)

@@ -24,6 +24,8 @@ export interface DriverTelemetry {
   speedKph: number
   isOnHotLap: boolean
   timestamp: number
+  normalizedX?: number
+  normalizedY?: number
 }
 
 export interface CircuitInfo {

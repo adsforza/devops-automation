@@ -11,12 +11,6 @@ export interface AppConfig {
 }
 
 export function loadConfig(): AppConfig {
-  // Lazy runtime import to avoid requiring dotenv in prod
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('dotenv').config()
-  } catch {}
-
   const provider = (process.env.PROVIDER as ProviderType) || 'sim'
   const port = process.env.PORT ? Number(process.env.PORT) : 4000
   return {
