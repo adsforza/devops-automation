@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { getSocket, type DriverTelemetry } from './lib/socket'
+import { fetchSessionInfo, fetchTeamRadio, type SessionInfoResponse, type TeamRadioItem } from './lib/api'
 
 function formatMs(ms?: number) {
   if (!ms || !isFinite(ms)) return '--:--.---'
@@ -106,15 +107,52 @@ function TimingTower({ cars }: { cars: DriverTelemetry[] }) {
 
 function App() {
   const telemetry = useTelemetry()
+  const [sessionInfo, setSessionInfo] = useState<SessionInfoResponse | null>(null)
+  const [radio, setRadio] = useState<TeamRadioItem[]>([])
+
+  useEffect(() => {
+    fetchSessionInfo().then(setSessionInfo).catch(() => setSessionInfo(null))
+    const loadRadio = () => fetchTeamRadio().then(setRadio).catch(() => {})
+    loadRadio()
+    const id = setInterval(loadRadio, 10000)
+    return () => clearInterval(id)
+  }, [])
   return (
     <div style={{ padding: 16, color: '#ecf0f1', background: '#0b0f1a', minHeight: '100vh' }}>
-      <h2 style={{ marginTop: 0 }}>F1 Live Telemetry (Sim)</h2>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ marginTop: 0 }}>F1 Live Telemetry</h2>
+        <div style={{ color: '#95a5a6', fontFamily: 'monospace' }}>
+          {sessionInfo?.circuit ? `${sessionInfo.circuit.name}${sessionInfo.circuit.country ? ' — ' + sessionInfo.circuit.country : ''}` : 'Cargando circuito...'}
+          {' '}<span style={{ opacity: 0.7 }}>[{sessionInfo?.provider ?? 'sim'}]</span>
+        </div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
         <TrackMap cars={telemetry} />
-        <TimingTower cars={telemetry} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <TimingTower cars={telemetry} />
+          <RadioPanel items={radio} />
+        </div>
       </div>
     </div>
   )
 }
 
 export default App
+
+function RadioPanel({ items }: { items: TeamRadioItem[] }) {
+  return (
+    <div style={{ background: '#0f1626', borderRadius: 8, padding: 10 }}>
+      <div style={{ marginBottom: 8, color: '#bdc3c7' }}>Team Radio</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflow: 'auto' }}>
+        {items.length === 0 && <div style={{ color: '#7f8c8d' }}>Sin radios recientes</div>}
+        {items.map((it) => (
+          <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '64px 1fr 72px', gap: 8, alignItems: 'center' }}>
+            <div style={{ color: '#ecf0f1', fontFamily: 'monospace' }}>{it.driverCode}</div>
+            <div style={{ color: '#bdc3c7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title || 'Radio'}</div>
+            <audio controls preload="none" src={it.url} style={{ width: '100%' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
