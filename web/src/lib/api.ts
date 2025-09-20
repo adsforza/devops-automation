@@ -24,3 +24,19 @@ export async function fetchTeamRadio(): Promise<TeamRadioItem[]> {
   return res.json()
 }
 
+export type BestLapItem = { driverCode: string; lapTimeMs: number }
+
+export function subscribeBestLaps(onData: (items: BestLapItem[]) => void): () => void {
+  const url = `${API_URL}/api/best-laps`
+  const ev = new EventSource(url)
+  const handler = (e: MessageEvent) => {
+    try {
+      const data = JSON.parse(e.data)
+      onData(data)
+    } catch {}
+  }
+  ev.addEventListener('message', handler as any)
+  ev.onmessage = handler
+  return () => ev.close()
+}
+

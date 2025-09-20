@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { getSocket, type DriverTelemetry } from './lib/socket'
-import { fetchSessionInfo, fetchTeamRadio, type SessionInfoResponse, type TeamRadioItem } from './lib/api'
+import { fetchSessionInfo, fetchTeamRadio, subscribeBestLaps, type SessionInfoResponse, type TeamRadioItem } from './lib/api'
 
 function formatMs(ms?: number) {
   if (!ms || !isFinite(ms)) return '--:--.---'
@@ -109,13 +109,15 @@ function App() {
   const telemetry = useTelemetry()
   const [sessionInfo, setSessionInfo] = useState<SessionInfoResponse | null>(null)
   const [radio, setRadio] = useState<TeamRadioItem[]>([])
+  const [bestLaps, setBestLaps] = useState<{ driverCode: string; lapTimeMs: number }[]>([])
 
   useEffect(() => {
     fetchSessionInfo().then(setSessionInfo).catch(() => setSessionInfo(null))
     const loadRadio = () => fetchTeamRadio().then(setRadio).catch(() => {})
     loadRadio()
     const id = setInterval(loadRadio, 10000)
-    return () => clearInterval(id)
+    const unsub = subscribeBestLaps(setBestLaps)
+    return () => { clearInterval(id); unsub() }
   }, [])
   return (
     <div style={{ padding: 16, color: '#ecf0f1', background: '#0b0f1a', minHeight: '100vh' }}>
@@ -130,6 +132,7 @@ function App() {
         <TrackMap cars={telemetry} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <TimingTower cars={telemetry} />
+          <BestLapsPanel items={bestLaps} />
           <RadioPanel items={radio} />
         </div>
       </div>
@@ -150,6 +153,24 @@ function RadioPanel({ items }: { items: TeamRadioItem[] }) {
             <div style={{ color: '#ecf0f1', fontFamily: 'monospace' }}>{it.driverCode}</div>
             <div style={{ color: '#bdc3c7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title || 'Radio'}</div>
             <audio controls preload="none" src={it.url} style={{ width: '100%' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BestLapsPanel({ items }: { items: { driverCode: string; lapTimeMs: number }[] }) {
+  return (
+    <div style={{ background: '#0f1626', borderRadius: 8, padding: 10 }}>
+      <div style={{ marginBottom: 8, color: '#bdc3c7' }}>Mejores Vueltas</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.length === 0 && <div style={{ color: '#7f8c8d' }}>Sin datos</div>}
+        {items.map((it, idx) => (
+          <div key={it.driverCode + idx} style={{ display: 'grid', gridTemplateColumns: '28px 64px 1fr', gap: 8, alignItems: 'center' }}>
+            <div style={{ color: '#95a5a6', textAlign: 'right' }}>{idx + 1}</div>
+            <div style={{ color: '#ecf0f1', fontFamily: 'monospace' }}>{it.driverCode}</div>
+            <div style={{ color: '#ecf0f1', fontFamily: 'monospace' }}>{formatMs(it.lapTimeMs)}</div>
           </div>
         ))}
       </div>

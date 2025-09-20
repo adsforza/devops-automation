@@ -55,12 +55,42 @@ app.get('/api/best-laps', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  const send = () => {
-    // Not tracking per-driver bests in this refactor; left for future
-    res.write(`data: ${JSON.stringify({})}\n\n`);
+  let active = true;
+  const send = async () => {
+    if (!active) return;
+    try {
+      if (f1Provider) {
+        const session = await (f1Provider as any).ensureSession?.();
+        if (!session) return res.write(`data: ${JSON.stringify([])}\n\n`);
+        const url = new URL(`${process.env.F1_BASE_URL?.replace(/\/$/, '')}/laps`);
+        url.searchParams.set('session_key', String(session.session_key));
+        url.searchParams.set('order_by', 'driver_number,-lap_number');
+        url.searchParams.set('limit', '200');
+        const r = await fetch(url.toString());
+        const arr: any[] = r.ok ? await r.json() : [];
+        const bestByDriver: Record<string, { driverCode: string; lapTimeMs: number }> = {};
+        for (const l of arr) {
+          const code = String(l.driver_number).padStart(2, '0');
+          const ms = toMs(l.lap_duration);
+          if (!isFinite(ms)) continue;
+          if (!bestByDriver[code] || ms < bestByDriver[code].lapTimeMs) bestByDriver[code] = { driverCode: code, lapTimeMs: ms };
+        }
+        const list = Object.values(bestByDriver).sort((a, b) => a.lapTimeMs - b.lapTimeMs).slice(0, 20);
+        return res.write(`data: ${JSON.stringify(list)}\n\n`);
+      } else {
+        // For simulator: compute from latest snapshot
+        const list = Object.values(simState.lastTelemetryByDriver)
+          .filter((t) => isFinite(t.lapTimeMs ?? NaN))
+          .map((t) => ({ driverCode: t.driverCode, lapTimeMs: t.lapTimeMs! }))
+          .sort((a, b) => a.lapTimeMs - b.lapTimeMs)
+          .slice(0, 20);
+        return res.write(`data: ${JSON.stringify(list)}\n\n`);
+      }
+    } catch {}
   };
-  const interval = setInterval(send, 2000);
-  req.on('close', () => clearInterval(interval));
+  const interval = setInterval(send, 3000);
+  send();
+  req.on('close', () => { active = false; clearInterval(interval); });
 });
 
 io.on('connection', async (socket) => {

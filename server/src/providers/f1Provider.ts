@@ -121,6 +121,17 @@ export class F1Provider {
       })
       this.bestSectorByDriver.set(driverNumber, personal)
 
+      // Fill mini-sectors heuristically (OpenF1 doesn't expose micro-sectors)
+      for (const sec of sectors) {
+        const count = 5
+        const base = isFinite(sec.timeMs) ? Math.max(1, Math.floor(sec.timeMs / count)) : 0
+        sec.miniSectors = Array.from({ length: count }).map((_, i) => ({
+          miniSectorIndex: i,
+          timeMs: base,
+          status: sec.status
+        }))
+      }
+
       const telem: DriverTelemetry = {
         driverId: driverCode,
         driverCode,
