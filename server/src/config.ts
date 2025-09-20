@@ -7,6 +7,7 @@ export interface AppConfig {
     baseUrl: string | null
     eventPath: string | null
     apiKey: string | null
+    sessionKey?: number | null
   }
 }
 
@@ -19,7 +20,8 @@ export function loadConfig(): AppConfig {
     f1: {
       baseUrl: process.env.F1_BASE_URL || null,
       eventPath: process.env.F1_EVENT_PATH || null,
-      apiKey: process.env.F1_API_KEY || null
+      apiKey: process.env.F1_API_KEY || null,
+      sessionKey: process.env.F1_SESSION_KEY ? Number(process.env.F1_SESSION_KEY) : null
     }
   }
 }

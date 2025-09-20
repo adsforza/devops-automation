@@ -29,9 +29,11 @@ const io = new SocketIOServer(server, {
 const cfg = loadConfig();
 const simState = createSimInitialState();
 const audioClips: AudioClipMeta[] = [];
-const f1Provider = cfg.provider === 'f1' && cfg.f1.baseUrl && cfg.f1.eventPath
-  ? new F1Provider({ baseUrl: cfg.f1.baseUrl, eventPath: cfg.f1.eventPath, apiKey: cfg.f1.apiKey })
+const f1Provider = cfg.f1.baseUrl && cfg.f1.eventPath
+  ? new F1Provider({ baseUrl: cfg.f1.baseUrl!, eventPath: cfg.f1.eventPath!, apiKey: cfg.f1.apiKey, sessionKey: cfg.f1.sessionKey ?? undefined })
   : null;
+let providerMode: 'f1' | 'sim' = cfg.provider;
+let emptyF1Cycles = 0;
 
 // REST: audio clips (simulated URLs)
 app.get('/api/audio', async (_req, res) => {
@@ -43,7 +45,7 @@ app.get('/api/audio', async (_req, res) => {
 });
 
 app.get('/api/session', async (_req, res) => {
-  if (f1Provider) {
+  if (f1Provider && providerMode === 'f1') {
     const info = await f1Provider.getCircuitInfo();
     return res.json({ provider: 'f1', circuit: info });
   }
@@ -95,7 +97,7 @@ app.get('/api/best-laps', (req, res) => {
 
 io.on('connection', async (socket) => {
   // Send current snapshot
-  if (f1Provider) {
+  if (f1Provider && providerMode === 'f1') {
     try {
       const snap = await f1Provider.fetchLatestTelemetry();
       socket.emit('telemetry:snapshot', snap);
@@ -109,7 +111,7 @@ io.on('connection', async (socket) => {
 
 // Simulation loop
 setInterval(() => {
-  if (f1Provider) {
+  if (f1Provider && providerMode === 'f1') {
     f1Provider.fetchLatestTelemetry()
       .then((updates) => {
         if (updates.length) io.emit('telemetry:update', updates);

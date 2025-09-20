@@ -4,16 +4,18 @@ export interface F1AdapterConfig {
   baseUrl: string
   eventPath: string
   apiKey?: string | null
+  sessionKey?: number | null
 }
 
 export class F1Provider {
   private readonly cfg: F1AdapterConfig
-  private sessionKey: number | null = null
+  private sessionKey: number | null
   private lastXYByDriver: Map<number, { x: number; y: number; t: number }> = new Map()
   private bestSectorGlobal: Record<'S1' | 'S2' | 'S3', number> = { S1: Infinity, S2: Infinity, S3: Infinity }
   private bestSectorByDriver: Map<number, Record<'S1' | 'S2' | 'S3', number>> = new Map()
   constructor(cfg: F1AdapterConfig) {
     this.cfg = cfg
+    this.sessionKey = cfg.sessionKey ?? null
   }
 
   async getCircuitInfo(): Promise<CircuitInfo | null> {
@@ -32,13 +34,22 @@ export class F1Provider {
     if (!session) return []
     const sessionKey = session.session_key
 
-    const positionsUrl = new URL(`${this.cfg.baseUrl.replace(/\/$/, '')}/positions`)
+    const positionsUrl = new URL(`${this.cfg.baseUrl.replace(/\/$/, '')}/position`)
     positionsUrl.searchParams.set('session_key', String(sessionKey))
-    positionsUrl.searchParams.set('latest', 'true')
-    positionsUrl.searchParams.set('limit', '100')
+    positionsUrl.searchParams.set('order_by', '-date')
+    positionsUrl.searchParams.set('limit', '200')
     const posResp = await fetch(positionsUrl)
     if (!posResp.ok) return []
-    const posJson: any[] = await posResp.json()
+    const posRaw: any[] = await posResp.json()
+    // Deduplicate: keep newest per driver_number
+    const seen = new Set<number>()
+    const posJson: any[] = []
+    for (const row of posRaw) {
+      const dn = row.driver_number
+      if (seen.has(dn)) continue
+      seen.add(dn)
+      posJson.push(row)
+    }
 
     // Fetch most recent laps data to infer sector times per driver
     const lapsUrl = new URL(`${this.cfg.baseUrl.replace(/\/$/, '')}/laps`)
@@ -174,17 +185,25 @@ export class F1Provider {
 
   private async ensureSession(): Promise<any | null> {
     if (this.sessionKey) return { session_key: this.sessionKey }
-    // Try to find the most recent or active session
-    const sessionsUrl = new URL(`${this.cfg.baseUrl.replace(/\/$/, '')}/sessions`)
-    sessionsUrl.searchParams.set('order_by', '-date_start')
-    sessionsUrl.searchParams.set('limit', '1')
-    const resp = await fetch(sessionsUrl)
-    if (!resp.ok) return null
-    const arr: any[] = await resp.json()
-    if (!arr.length) return null
-    const s = arr[0]
-    this.sessionKey = s.session_key
-    return s
+    // Try to find an active or latest session with several strategies
+    const base = this.cfg.baseUrl.replace(/\/$/, '')
+    const tryUrls: string[] = [
+      `${base}/sessions?session_status=active&order_by=-date_start&limit=1`,
+      `${base}/sessions?order_by=-date_start&limit=1`
+    ]
+    for (const u of tryUrls) {
+      try {
+        const resp = await fetch(u)
+        if (!resp.ok) continue
+        const arr: any[] = await resp.json()
+        if (arr && arr.length) {
+          const s = arr[0]
+          this.sessionKey = s.session_key
+          return s
+        }
+      } catch {}
+    }
+    return null
   }
 }
 

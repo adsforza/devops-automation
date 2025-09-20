@@ -8,6 +8,8 @@ Variables de entorno (server/.env)
 F1_BASE_URL=https://api.openf1.org/v1
 F1_EVENT_PATH=/sessions
 F1_API_KEY=
+# Opcional: fija una sesión específica
+# F1_SESSION_KEY=123456
 PROVIDER=f1
 ```
 - Usa `PROVIDER=sim` para correr con datos simulados.
