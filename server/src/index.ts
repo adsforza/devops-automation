@@ -7,6 +7,7 @@ import { loadConfig } from './config';
 import type { DriverTelemetry } from './types';
 import { createSimInitialState, nextSimTick } from './providers/simProvider';
 import { F1Provider } from './providers/f1Provider';
+import { FastF1Provider } from './providers/fastf1Provider';
 
 interface AudioClipMeta {
   id: string;
@@ -32,7 +33,8 @@ const audioClips: AudioClipMeta[] = [];
 const f1Provider = cfg.f1.baseUrl && cfg.f1.eventPath
   ? new F1Provider({ baseUrl: cfg.f1.baseUrl!, eventPath: cfg.f1.eventPath!, apiKey: cfg.f1.apiKey, sessionKey: cfg.f1.sessionKey ?? undefined })
   : null;
-let providerMode: 'f1' | 'sim' = cfg.provider;
+const fastf1Provider = cfg.fastf1.baseUrl ? new FastF1Provider({ baseUrl: cfg.fastf1.baseUrl! }) : null;
+let providerMode: 'f1' | 'sim' | 'fastf1' = cfg.provider as any;
 let emptyF1Cycles = 0;
 
 // REST: audio clips (simulated URLs)
@@ -45,6 +47,10 @@ app.get('/api/audio', async (_req, res) => {
 });
 
 app.get('/api/session', async (_req, res) => {
+  if (providerMode === 'fastf1' && fastf1Provider) {
+    const info = await fastf1Provider.getCircuitInfo();
+    return res.json({ provider: 'fastf1', circuit: info });
+  }
   if (f1Provider && providerMode === 'f1') {
     const info = await f1Provider.getCircuitInfo();
     return res.json({ provider: 'f1', circuit: info });
@@ -97,7 +103,14 @@ app.get('/api/best-laps', (req, res) => {
 
 io.on('connection', async (socket) => {
   // Send current snapshot
-  if (f1Provider && providerMode === 'f1') {
+  if (providerMode === 'fastf1' && fastf1Provider) {
+    try {
+      const snap = await fastf1Provider.fetchLatestTelemetry();
+      socket.emit('telemetry:snapshot', snap);
+    } catch (e) {
+      socket.emit('telemetry:snapshot', [] as DriverTelemetry[]);
+    }
+  } else if (f1Provider && providerMode === 'f1') {
     try {
       const snap = await f1Provider.fetchLatestTelemetry();
       socket.emit('telemetry:snapshot', snap);
@@ -111,7 +124,13 @@ io.on('connection', async (socket) => {
 
 // Simulation loop
 setInterval(() => {
-  if (f1Provider && providerMode === 'f1') {
+  if (providerMode === 'fastf1' && fastf1Provider) {
+    fastf1Provider.fetchLatestTelemetry()
+      .then((updates) => {
+        if (updates.length) io.emit('telemetry:update', updates as any);
+      })
+      .catch(() => {})
+  } else if (f1Provider && providerMode === 'f1') {
     f1Provider.fetchLatestTelemetry()
       .then((updates) => {
         if (updates.length) io.emit('telemetry:update', updates);
