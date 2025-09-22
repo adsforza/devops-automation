@@ -28,3 +28,19 @@ executionsRouter.get('/:id', async (req, res) => {
 	const data = await getExecution(id);
 	res.json(data);
 });
+
+executionsRouter.get('/:id/result', async (req, res) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const query = z.object({ limit: z.coerce.number().int().min(1).max(1000).default(100), offset: z.coerce.number().int().min(0).default(0) }).parse(req.query);
+    const logs = await prisma.executionLog.findMany({ where: { executionId: id }, orderBy: { createdAt: 'asc' } });
+    const rows: any[] = [];
+    for (const l of logs) {
+        try {
+            const p = JSON.parse(l.message || '');
+            if (p && p.type === 'rows' && Array.isArray(p.rows)) rows.push(...p.rows);
+        } catch {}
+    }
+    const total = rows.length;
+    const page = rows.slice(query.offset, query.offset + query.limit);
+    res.json({ items: page, total });
+});
