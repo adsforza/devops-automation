@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText, Stack, Badge } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { listConnections, listScripts, startExecution } from '../../lib/api';
+import { api, listConnections, listScripts, startExecution } from '../../lib/api';
 
 function b64decode(b64?: string) {
 	if (!b64) return '';
 	try { return atob(b64); } catch { return ''; }
+}
+
+function safeParse(msg: string): any | null {
+    try { return JSON.parse(msg); } catch { return null; }
 }
 
 export function ExecutePage() {
@@ -17,7 +21,30 @@ export function ExecutePage() {
 
 	const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
 	const { data: scripts = [] } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
-	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); } });
+    const [lastResult, setLastResult] = useState<any[] | null>(null);
+    const mutation = useMutation({
+        mutationFn: startExecution,
+        onSuccess: async (data) => {
+            toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' });
+            // Poll execution until finished and then fetch logs to extract rows
+            const id = data.id;
+            let attempts = 0;
+            let status = 'running';
+            while (attempts < 30 && status === 'running') {
+                await new Promise((r) => setTimeout(r, 1000));
+                const exec = await api.get(`/executions/${id}`);
+                status = exec.data.execution.status;
+                if (status !== 'running') {
+                    const logs = exec.data.logs as Array<{ message: string }>; 
+                    const rowsLog = logs.map((l) => safeParse(l.message)).find((p) => p && p.type === 'rows');
+                    setLastResult(rowsLog?.rows || null);
+                    break;
+                }
+                attempts += 1;
+            }
+        },
+        onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); }
+    });
 
 	const selectedScriptId = watch('script') as string | undefined;
 	const selectedConnectionId = watch('connection') as string | undefined;
@@ -187,6 +214,13 @@ export function ExecutePage() {
 				<Box mt={6}>
 					<Heading size="sm" mb={2}>Previsualización</Heading>
 					<Code display="block" p={4} whiteSpace="pre-wrap">{preview}</Code>
+				</Box>
+			)}
+
+			{lastResult && (
+				<Box mt={6}>
+					<Heading size="sm" mb={2}>Resultados (parcial)</Heading>
+					<Code display="block" p={4} whiteSpace="pre-wrap">{JSON.stringify(lastResult, null, 2)}</Code>
 				</Box>
 			)}
 

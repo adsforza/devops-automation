@@ -79,6 +79,12 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			durationMs,
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: `Rows: ${result.rowCount}` } });
+		// Store a preview of result rows (first 100 rows, 100 cols) as JSON in logs for UI consumption
+		try {
+			const maxRows = 100;
+			const rowsPreview = Array.isArray(result.rows) ? result.rows.slice(0, maxRows) : [];
+			await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: JSON.stringify({ type: 'rows', rows: rowsPreview }) } });
+		} catch {}
 		await writeAuditLog({ action: 'execution.succeeded', resourceType: 'execution', resourceId: execution.id, userId: actorId, metadata: { rowCount: result.rowCount } });
 		return { id: execution.id };
 	} catch (err: any) {
