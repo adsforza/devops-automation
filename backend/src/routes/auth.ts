@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { Issuer, generators } from 'openid-client';
+import openid from 'openid-client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { logger } from '../common/logger.js';
 
+const { Issuer, generators } = openid as any;
 let oidcClient: any = null;
 let codeVerifier: string | null = null;
 
