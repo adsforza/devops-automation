@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText, Stack, Badge } from '@chakra-ui/react';
+import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Select, Textarea, useToast, FormHelperText, Stack, Badge, Table, Thead, Tbody, Tr, Th, Td, Spinner } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, listConnections, listScripts, startExecution } from '../../lib/api';
@@ -14,14 +14,14 @@ function safeParse(msg: string): any | null {
 }
 
 export function ExecutePage() {
-	const toast = useToast();
-	const { isOpen, onOpen, onClose } = useDisclosure();
+    const toast = useToast();
 	const { register, handleSubmit, formState: { errors, isSubmitting }, watch, setValue, getValues, reset } = useForm();
 	const [preview, setPreview] = useState<string>('');
 
 	const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
 	const { data: scripts = [] } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
     const [lastResult, setLastResult] = useState<any[] | null>(null);
+    const [isPolling, setIsPolling] = useState(false);
     const mutation = useMutation({
         mutationFn: startExecution,
         onSuccess: async (data) => {
@@ -30,6 +30,7 @@ export function ExecutePage() {
             const id = data.id;
             let attempts = 0;
             let status = 'running';
+            setIsPolling(true);
             while (attempts < 30 && status === 'running') {
                 await new Promise((r) => setTimeout(r, 1000));
                 const exec = await api.get(`/executions/${id}`);
@@ -42,6 +43,7 @@ export function ExecutePage() {
                 }
                 attempts += 1;
             }
+            setIsPolling(false);
         },
         onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); }
     });
@@ -150,16 +152,14 @@ export function ExecutePage() {
 		}
 	}
 
-	const onSubmit = async () => {
+    const onSubmit = async () => {
 		const params = buildParams(selectedScript, getValues);
 		setPreview(`-- Vista previa\nScript: ${selectedScript?.name}\nDB: ${getValues('connection')}\nParams: ${JSON.stringify(params, null, 2)}`);
-		onOpen();
 	};
 
-	const onConfirm = async () => {
+    const onRun = async () => {
 		const params = buildParams(selectedScript, getValues);
 		await mutation.mutateAsync({ scriptId: selectedScriptId!, dbConnectionId: getValues('connection'), params });
-		onClose();
 	};
 
 	const canSubmit = !!selectedScriptId && !!selectedConnectionId && !connectionNotAllowed && requiredFilled;
@@ -207,7 +207,10 @@ export function ExecutePage() {
 					</Box>
 				)}
 
-				<Button type="submit" colorScheme="blue" isLoading={isSubmitting} isDisabled={!canSubmit}>Previsualizar</Button>
+                <HStack spacing={3}>
+                    <Button type="submit" colorScheme="gray" isLoading={isSubmitting} isDisabled={!canSubmit}>Previsualizar</Button>
+                    <Button colorScheme="blue" onClick={onRun} isLoading={mutation.isPending} isDisabled={!canSubmit}>Ejecutar</Button>
+                </HStack>
 			</form>
 
 			{preview && (
@@ -217,24 +220,19 @@ export function ExecutePage() {
 				</Box>
 			)}
 
+			{isPolling && (
+				<HStack mt={4}>
+					<Spinner size="sm" />
+					<Heading size="xs">Ejecutando...</Heading>
+				</HStack>
+			)}
+
 			{lastResult && (
 				<Box mt={6}>
 					<Heading size="sm" mb={2}>Resultados (parcial)</Heading>
-					<Code display="block" p={4} whiteSpace="pre-wrap">{JSON.stringify(lastResult, null, 2)}</Code>
+					<ResultTable rows={lastResult} />
 				</Box>
 			)}
-
-			<Modal isOpen={isOpen} onClose={onClose} isCentered>
-				<ModalOverlay />
-				<ModalContent>
-					<ModalHeader>Confirmar ejecución</ModalHeader>
-					<ModalBody>¿Deseas ejecutar este script con los parámetros indicados?</ModalBody>
-					<ModalFooter>
-						<Button onClick={onClose} variant="ghost">Cancelar</Button>
-						<Button colorScheme="blue" onClick={onConfirm} isLoading={mutation.isPending} isDisabled={!canSubmit}>Ejecutar</Button>
-					</ModalFooter>
-				</ModalContent>
-			</Modal>
 		</Box>
 	);
 }
@@ -252,4 +250,36 @@ function buildParams(selectedScript: any, getValues: (name?: string) => any) {
 		if (v !== undefined && v !== '') params[(p as any).name] = v;
 	}
 	return params;
+}
+
+function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
+    if (!rows || rows.length === 0) return <Code display="block" p={4}>Sin resultados</Code>;
+    const columns: string[] = Array.from(
+        rows.reduce((set: Set<string>, r) => { Object.keys(r || {}).forEach((k) => set.add(k)); return set; }, new Set<string>())
+    ) as string[];
+    return (
+        <Table size="sm" variant="striped">
+            <Thead>
+                <Tr>
+                    {columns.map((c: string) => <Th key={String(c)}>{String(c)}</Th>)}
+                </Tr>
+            </Thead>
+            <Tbody>
+                {rows.map((r, idx) => (
+                    <Tr key={idx}>
+                        {columns.map((c: string) => {
+                            const cell = (r as Record<string, unknown>)[c];
+                            return <Td key={String(c)}><Code whiteSpace="pre">{formatCell(cell)}</Code></Td>;
+                        })}
+                    </Tr>
+                ))}
+            </Tbody>
+        </Table>
+    );
+}
+
+function formatCell(v: any): string {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
 }
