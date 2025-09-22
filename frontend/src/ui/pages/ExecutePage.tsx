@@ -1,23 +1,59 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Textarea, useDisclosure, useToast, FormHelperText, Stack, Badge } from '@chakra-ui/react';
+import { Box, Button, Code, FormControl, FormErrorMessage, FormLabel, Heading, HStack, Input, Select, Textarea, useToast, FormHelperText, Stack, Badge, Table, Thead, Tbody, Tr, Th, Td, Spinner, Checkbox, Menu, MenuButton, MenuList, MenuItem } from '@chakra-ui/react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { listConnections, listScripts, startExecution } from '../../lib/api';
+import { api, listConnections, listScripts, startExecution } from '../../lib/api';
 
 function b64decode(b64?: string) {
 	if (!b64) return '';
 	try { return atob(b64); } catch { return ''; }
 }
 
+function safeParse(msg: string): any | null {
+    try { return JSON.parse(msg); } catch { return null; }
+}
+
 export function ExecutePage() {
-	const toast = useToast();
-	const { isOpen, onOpen, onClose } = useDisclosure();
+    const toast = useToast();
 	const { register, handleSubmit, formState: { errors, isSubmitting }, watch, setValue, getValues, reset } = useForm();
 	const [preview, setPreview] = useState<string>('');
 
 	const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: listConnections });
 	const { data: scripts = [] } = useQuery({ queryKey: ['scripts-all'], queryFn: listScripts });
-	const mutation = useMutation({ mutationFn: startExecution, onSuccess: (data) => { toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' }); }, onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); } });
+    const [lastExecId, setLastExecId] = useState<string | null>(null);
+    const [lastResult, setLastResult] = useState<Array<Record<string, unknown>> | null>(null);
+    const [isPolling, setIsPolling] = useState(false);
+    const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(100);
+    const [visibleCols, setVisibleCols] = useState<string[] | null>(null);
+    const mutation = useMutation({
+        mutationFn: startExecution,
+        onSuccess: async (data) => {
+            toast({ title: 'Ejecución iniciada', description: `ID: ${data.id}`, status: 'success' });
+            // Poll execution until finished and then fetch logs to extract rows
+            const id = data.id;
+            setLastExecId(id);
+            let attempts = 0;
+            let status = 'running';
+            setIsPolling(true);
+            while (attempts < 30 && status === 'running') {
+                await new Promise((r) => setTimeout(r, 1000));
+                const exec = await api.get(`/executions/${id}`);
+                status = exec.data.execution.status;
+                if (status !== 'running') {
+                    // Fetch first page from backend paginated endpoint
+                    const res = await api.get(`/executions/${id}/result`, { params: { limit: pageSize, offset: 0 } });
+                    setLastResult(res.data.items || []);
+                    setPage(0);
+                    setVisibleCols(null);
+                    break;
+                }
+                attempts += 1;
+            }
+            setIsPolling(false);
+        },
+        onError: (e: any) => { const msg = e?.response?.data?.message || e?.message || 'Fallo'; toast({ title: 'Error al ejecutar', description: msg, status: 'error' }); }
+    });
 
 	const selectedScriptId = watch('script') as string | undefined;
 	const selectedConnectionId = watch('connection') as string | undefined;
@@ -123,16 +159,14 @@ export function ExecutePage() {
 		}
 	}
 
-	const onSubmit = async () => {
+    const onSubmit = async () => {
 		const params = buildParams(selectedScript, getValues);
 		setPreview(`-- Vista previa\nScript: ${selectedScript?.name}\nDB: ${getValues('connection')}\nParams: ${JSON.stringify(params, null, 2)}`);
-		onOpen();
 	};
 
-	const onConfirm = async () => {
+    const onRun = async () => {
 		const params = buildParams(selectedScript, getValues);
 		await mutation.mutateAsync({ scriptId: selectedScriptId!, dbConnectionId: getValues('connection'), params });
-		onClose();
 	};
 
 	const canSubmit = !!selectedScriptId && !!selectedConnectionId && !connectionNotAllowed && requiredFilled;
@@ -180,7 +214,10 @@ export function ExecutePage() {
 					</Box>
 				)}
 
-				<Button type="submit" colorScheme="blue" isLoading={isSubmitting} isDisabled={!canSubmit}>Previsualizar</Button>
+                <HStack spacing={3}>
+                    <Button type="submit" colorScheme="gray" isLoading={isSubmitting} isDisabled={!canSubmit}>Previsualizar</Button>
+                    <Button colorScheme="blue" onClick={onRun} isLoading={mutation.isPending} isDisabled={!canSubmit}>Ejecutar</Button>
+                </HStack>
 			</form>
 
 			{preview && (
@@ -190,17 +227,41 @@ export function ExecutePage() {
 				</Box>
 			)}
 
-			<Modal isOpen={isOpen} onClose={onClose} isCentered>
-				<ModalOverlay />
-				<ModalContent>
-					<ModalHeader>Confirmar ejecución</ModalHeader>
-					<ModalBody>¿Deseas ejecutar este script con los parámetros indicados?</ModalBody>
-					<ModalFooter>
-						<Button onClick={onClose} variant="ghost">Cancelar</Button>
-						<Button colorScheme="blue" onClick={onConfirm} isLoading={mutation.isPending} isDisabled={!canSubmit}>Ejecutar</Button>
-					</ModalFooter>
-				</ModalContent>
-			</Modal>
+			{isPolling && (
+				<HStack mt={4}>
+					<Spinner size="sm" />
+					<Heading size="xs">Ejecutando...</Heading>
+				</HStack>
+			)}
+
+			{lastResult && (
+				<Box mt={6}>
+					<Heading size="sm" mb={2}>Resultados (parcial)</Heading>
+					<ResultToolbar
+						page={page}
+						pageSize={pageSize}
+						onChangePage={async (p) => {
+							if (!lastExecId) return;
+							const res = await api.get(`/executions/${lastExecId}/result`, { params: { limit: pageSize, offset: p * pageSize } });
+							setLastResult(res.data.items || []);
+							setPage(p);
+						}}
+						onChangePageSize={async (s) => {
+							if (!lastExecId) return;
+							const res = await api.get(`/executions/${lastExecId}/result`, { params: { limit: s, offset: 0 } });
+							setPageSize(s);
+							setPage(0);
+							setLastResult(res.data.items || []);
+						}}
+						columns={computeColumns(lastResult)}
+						visibleCols={visibleCols}
+						onToggleColumn={(col) => toggleCol(col, visibleCols, setVisibleCols)}
+						onDownloadCsv={() => downloadCsv(lastResult, visibleCols)}
+						onDownloadJson={() => downloadJson(lastResult, visibleCols)}
+					/>
+					<ResultTable rows={lastResult} columns={filterColumns(computeColumns(lastResult), visibleCols)} />
+				</Box>
+			)}
 		</Box>
 	);
 }
@@ -218,4 +279,116 @@ function buildParams(selectedScript: any, getValues: (name?: string) => any) {
 		if (v !== undefined && v !== '') params[(p as any).name] = v;
 	}
 	return params;
+}
+
+function ResultTable({ rows, columns }: { rows: Array<Record<string, unknown>>; columns: string[] }) {
+    if (!rows || rows.length === 0) return <Code display="block" p={4}>Sin resultados</Code>;
+    return (
+        <Table size="sm" variant="striped">
+            <Thead>
+                <Tr>
+                    {columns.map((c: string) => <Th key={String(c)}>{String(c)}</Th>)}
+                </Tr>
+            </Thead>
+            <Tbody>
+                {rows.map((r, idx) => (
+                    <Tr key={idx}>
+                        {columns.map((c: string) => {
+                            const cell = (r as Record<string, unknown>)[c];
+                            return <Td key={String(c)}><Code whiteSpace="pre">{formatCell(cell)}</Code></Td>;
+                        })}
+                    </Tr>
+                ))}
+            </Tbody>
+        </Table>
+    );
+}
+
+function formatCell(v: any): string {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+}
+
+function computeColumns(rows: Array<Record<string, unknown>>): string[] {
+    return Array.from(rows.reduce((set: Set<string>, r) => { Object.keys(r || {}).forEach((k) => set.add(k)); return set; }, new Set<string>())) as string[];
+}
+
+function filterColumns(columns: string[], visible: string[] | null): string[] {
+    if (!visible || visible.length === 0) return columns;
+    const set = new Set(visible);
+    return columns.filter((c) => set.has(c));
+}
+
+function toggleCol(col: string, visible: string[] | null, setVisible: (v: string[]) => void) {
+    const set = new Set(visible || []);
+    if (set.has(col)) set.delete(col); else set.add(col);
+    setVisible(Array.from(set));
+}
+
+function downloadCsv(rows: Array<Record<string, unknown>>, visible: string[] | null) {
+    const cols = computeColumns(rows);
+    const finalCols = filterColumns(cols, visible);
+    const escape = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+    const header = finalCols.map((c) => escape(String(c))).join(',');
+    const body = rows.map((r) => finalCols.map((c) => escape(formatCell((r as any)[c]))).join(',')).join('\n');
+    const csv = header + '\n' + body;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'resultado.csv'; a.click();
+    URL.revokeObjectURL(url);
+}
+
+function downloadJson(rows: Array<Record<string, unknown>>, visible: string[] | null) {
+    const cols = computeColumns(rows);
+    const finalCols = filterColumns(cols, visible);
+    const data = rows.map((r) => finalCols.reduce((acc: any, c) => { acc[c] = (r as any)[c]; return acc; }, {} as any));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'resultado.json'; a.click();
+    URL.revokeObjectURL(url);
+}
+
+function ResultToolbar(props: {
+    page: number;
+    pageSize: number;
+    onChangePage: (p: number) => void | Promise<void>;
+    onChangePageSize: (s: number) => void | Promise<void>;
+    columns: string[];
+    visibleCols: string[] | null;
+    onToggleColumn: (c: string) => void;
+    onDownloadCsv: () => void;
+    onDownloadJson: () => void;
+}) {
+    const sizes = [50, 100, 250, 500, 1000];
+    return (
+        <HStack mb={3} spacing={3} align="center">
+            <HStack>
+                <Button onClick={() => props.onChangePage(Math.max(props.page - 1, 0))} isDisabled={props.page === 0}>Prev</Button>
+                <Button onClick={() => props.onChangePage(props.page + 1)}>Next</Button>
+            </HStack>
+            <Select width="140px" value={String(props.pageSize)} onChange={(e) => props.onChangePageSize(Number(e.target.value))}>
+                {sizes.map((s) => <option key={s} value={s}>{s} filas</option>)}
+            </Select>
+            <Menu>
+                <MenuButton as={Button}>
+                    Columnas
+                </MenuButton>
+                <MenuList minW="240px">
+                    {props.columns.map((c) => (
+                        <MenuItem key={c} closeOnSelect={false}>
+                            <HStack>
+                                <Checkbox isChecked={!props.visibleCols || props.visibleCols.includes(c)} onChange={() => props.onToggleColumn(c)} />
+                                <Code>{c}</Code>
+                            </HStack>
+                        </MenuItem>
+                    ))}
+                </MenuList>
+            </Menu>
+            <Button onClick={props.onDownloadCsv}>CSV</Button>
+            <Button onClick={props.onDownloadJson}>JSON</Button>
+        </HStack>
+    );
 }

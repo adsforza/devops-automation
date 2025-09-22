@@ -11,6 +11,7 @@ phases:
   post_build:
     commands:
       - aws s3 sync frontend/dist s3://$FRONTEND_BUCKET --delete
+      - aws cloudfront create-invalidation --distribution-id $CF_DIST_ID --paths '/*'
 artifacts:
   files:
     - '**/*'
@@ -18,3 +19,4 @@ artifacts:
 env:
   parameter-store:
     FRONTEND_BUCKET: "/automation/${ENV}/frontend_bucket"
+    CF_DIST_ID: "/automation/${ENV}/frontend_distribution_id"

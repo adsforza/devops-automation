@@ -12,7 +12,8 @@ resource "aws_ecs_cluster" "backend" {
 resource "aws_lb" "app" {
 	name               = "${local.name_prefix}-alb"
 	load_balancer_type = "application"
-	subnets            = var.private_subnet_ids
+    # Use public subnets for internet-facing ALB, or change internal=true and keep private subnets
+    subnets            = var.private_subnet_ids
 	internal           = false
 	security_groups    = [aws_security_group.alb.id]
 }

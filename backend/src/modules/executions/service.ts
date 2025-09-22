@@ -79,6 +79,16 @@ export async function startExecution(scriptId: string, dbConnectionId: string, p
 			durationMs,
 		}});
 		await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: `Rows: ${result.rowCount}` } });
+		// Store rows in chunked logs for later pagination. Also include a small preview in the first chunk.
+		try {
+			const rows = Array.isArray(result.rows) ? result.rows : [];
+			const chunkSize = 1000;
+			for (let i = 0; i < rows.length; i += chunkSize) {
+				const chunk = rows.slice(i, i + chunkSize);
+				const payload = { type: 'rows', chunk: Math.floor(i / chunkSize), rows: chunk };
+				await prisma.executionLog.create({ data: { executionId: execution.id, level: 'info', message: JSON.stringify(payload) } });
+			}
+		} catch {}
 		await writeAuditLog({ action: 'execution.succeeded', resourceType: 'execution', resourceId: execution.id, userId: actorId, metadata: { rowCount: result.rowCount } });
 		return { id: execution.id };
 	} catch (err: any) {

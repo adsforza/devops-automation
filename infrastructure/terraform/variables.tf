@@ -8,3 +8,4 @@ variable "db_instance_class" { type = string default = "db.t4g.micro" }
 variable "db_allocated_storage" { type = number default = 20 }
 
 variable "audit_retention_days" { type = number default = 3650 }
+variable "ecs_service_sg_ids" { type = list(string) default = [] }

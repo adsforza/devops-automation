@@ -19,10 +19,11 @@ const EnvSchema = z.object({
 	AUDIT_S3_BUCKET: z.string().optional(),
 	AUDIT_S3_OBJECT_LOCK: z.coerce.boolean().optional().default(true),
 
-	OIDC_ISSUER_URL: z.string().url().optional(),
-	OIDC_CLIENT_ID: z.string().optional(),
-	OIDC_CLIENT_SECRET: z.string().optional(),
-	OIDC_REDIRECT_URI: z.string().url().optional(),
+    OIDC_ISSUER_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+    OIDC_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    OIDC_CLIENT_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    OIDC_REDIRECT_URI: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+	SESSION_COOKIE_TTL_SECONDS: z.coerce.number().default(60 * 60 * 8),
 	TOKEN_ROTATION_SECONDS: z.coerce.number().default(300),
 
 	RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),

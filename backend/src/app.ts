@@ -9,10 +9,24 @@ import { env } from './config/env.js';
 import { buildCsp } from './config/security.js';
 import { router } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './common/errors.js';
+import type { Request, Response, NextFunction } from 'express';
+import { logger } from './common/logger.js';
+import { randomUUID } from 'crypto';
 
 const app = express();
 
 app.set('trust proxy', 1);
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+    const reqId = (req.headers['x-request-id'] as string) || randomUUID();
+    res.setHeader('x-request-id', reqId);
+    const start = Date.now();
+    res.on('finish', () => {
+        const durationMs = Date.now() - start;
+        logger.info({ reqId, method: req.method, url: req.originalUrl, statusCode: res.statusCode, durationMs, remoteAddress: req.ip }, 'http_request');
+    });
+    next();
+});
 
 app.use(helmet({
 	contentSecurityPolicy: buildCsp(env.CSP_DEFAULT_SRC),
@@ -20,8 +34,13 @@ app.use(helmet({
 }));
 
 app.use(cors({
-	origin: env.CORS_ORIGIN,
-	credentials: true,
+    origin: (origin, callback) => {
+        const allowed = env.CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean);
+        if (!origin) return callback(null, true);
+        if (allowed.includes(origin)) return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
 }));
 
 app.use(rateLimit({

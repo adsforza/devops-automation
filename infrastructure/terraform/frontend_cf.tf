@@ -44,5 +44,28 @@ resource "aws_cloudfront_distribution" "frontend" {
 	restrictions { geo_restriction { restriction_type = "none" } }
 }
 
+# Allow CloudFront OAC to access S3 bucket
+data "aws_iam_policy_document" "frontend_bucket" {
+  statement {
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.frontend.arn}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+  policy = data.aws_iam_policy_document.frontend_bucket.json
+}
+
 output "frontend_bucket" { value = aws_s3_bucket.frontend.bucket }
 output "frontend_cdn_domain" { value = aws_cloudfront_distribution.frontend.domain_name }
+output "frontend_distribution_id" { value = aws_cloudfront_distribution.frontend.id }

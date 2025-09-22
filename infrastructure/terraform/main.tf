@@ -59,7 +59,17 @@ resource "aws_security_group" "rds" {
 	name        = "${local.name_prefix}-rds-sg"
 	description = "RDS security group"
 	vpc_id      = var.vpc_id
-	ingress { description = "App access" from_port = 5432 to_port = 5432 protocol = "tcp" cidr_blocks = ["10.0.0.0/8"] }
+    # Restrict to ECS service SG. Provide this security group id from backend_ecs module output.
+    dynamic "ingress" {
+        for_each = length(try(var.ecs_service_sg_ids, [])) > 0 ? var.ecs_service_sg_ids : []
+        content {
+            description      = "App access from ECS"
+            from_port        = 5432
+            to_port          = 5432
+            protocol         = "tcp"
+            security_groups  = [ingress.value]
+        }
+    }
 	egress  { from_port = 0 to_port = 0 protocol = "-1" cidr_blocks = ["0.0.0.0/0"] }
 }
 
