@@ -11,6 +11,7 @@ import { rolesRouter } from '../modules/roles/router.js';
 import { changesRouter } from '../modules/changes/router.js';
 import { metadataRouter } from '../modules/metadata/router.js';
 import { rolePermsRouter } from '../modules/rolesPerms/router.js';
+import { requireAuth, requireRoles } from '../middleware/auth.js';
 
 export const router = Router();
 
@@ -24,15 +25,15 @@ router.get('/version', (_req, res) => {
 
 router.use('/', openapiRouter);
 router.use('/auth', authRouter);
-router.use('/db-connections', connectionsRouter);
+router.use('/db-connections', requireAuth, connectionsRouter);
 router.use('/db-connections/:id/metadata', metadataRouter);
-router.use('/scripts', scriptsRouter);
-router.use('/executions', executionsRouter);
-router.use('/audit', auditRouter);
-router.use('/changes', changesRouter);
-router.use('/admin/users', usersRouter);
-router.use('/admin/roles', rolesRouter);
-router.use('/admin/roles/:roleId/permissions', rolePermsRouter);
+router.use('/scripts', requireAuth, scriptsRouter);
+router.use('/executions', requireAuth, executionsRouter);
+router.use('/audit', requireAuth, requireRoles(['Admin','SuperAdmin']), auditRouter);
+router.use('/changes', requireAuth, changesRouter);
+router.use('/admin/users', requireAuth, requireRoles(['Admin','SuperAdmin']), usersRouter);
+router.use('/admin/roles', requireAuth, requireRoles(['Admin','SuperAdmin']), rolesRouter);
+router.use('/admin/roles/:roleId/permissions', requireAuth, requireRoles(['Admin','SuperAdmin']), rolePermsRouter);
 
 router.get('/', (_req, res) => {
 	res.json({ name: 'automation-backend', docs: '/docs' });

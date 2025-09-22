@@ -23,6 +23,7 @@ const EnvSchema = z.object({
 	OIDC_CLIENT_ID: z.string().optional(),
 	OIDC_CLIENT_SECRET: z.string().optional(),
 	OIDC_REDIRECT_URI: z.string().url().optional(),
+	SESSION_COOKIE_TTL_SECONDS: z.coerce.number().default(60 * 60 * 8),
 	TOKEN_ROTATION_SECONDS: z.coerce.number().default(300),
 
 	RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
