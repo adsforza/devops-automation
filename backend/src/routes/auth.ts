@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import openid from 'openid-client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { logger } from '../common/logger.js';
 
-const { Issuer, generators } = openid as any;
+let openidMod: any;
+async function getOpenId() {
+    if (!openidMod) {
+        openidMod = await import('openid-client');
+    }
+    return openidMod;
+}
 let oidcClient: any = null;
 let codeVerifier: string | null = null;
 
@@ -26,6 +31,7 @@ authRouter.get('/login', async (req, res) => {
         if (!env.OIDC_ISSUER_URL || !env.OIDC_CLIENT_ID || !env.OIDC_REDIRECT_URI) {
             return res.status(503).json({ error: 'AuthDisabled' });
         }
+        const { Issuer, generators } = await getOpenId();
         const issuer = await Issuer.discover(env.OIDC_ISSUER_URL);
         oidcClient = new issuer.Client({ client_id: env.OIDC_CLIENT_ID, client_secret: env.OIDC_CLIENT_SECRET });
         const state = generators.state();
@@ -48,6 +54,7 @@ authRouter.get('/login', async (req, res) => {
 authRouter.get('/callback', async (req, res) => {
     try {
         if (!oidcClient || !codeVerifier) return res.status(400).json({ error: 'InvalidState' });
+        const { generators } = await getOpenId();
         const params = oidcClient.callbackParams(req);
         const tokenSet = await oidcClient.callback(env.OIDC_REDIRECT_URI!, params, { code_verifier: codeVerifier });
         const userinfo = await oidcClient.userinfo(tokenSet.access_token!);
